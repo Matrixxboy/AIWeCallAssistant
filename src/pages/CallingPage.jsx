@@ -378,9 +378,14 @@ function CallingPage() {
                   </div>
                   <button
                     onClick={joinCall}
-                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors font-medium"
+                    disabled={!isSignalingAvailable}
+                    className={`w-full py-3 text-white rounded-md transition-colors font-medium ${
+                      isSignalingAvailable
+                        ? 'bg-blue-600 hover:bg-blue-700'
+                        : 'bg-gray-600 cursor-not-allowed opacity-50'
+                    }`}
                   >
-                    Join Call
+                    {isSignalingAvailable ? 'Join Call' : 'Service Unavailable'}
                   </button>
                 </div>
               </div>
