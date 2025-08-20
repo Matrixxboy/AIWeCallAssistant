@@ -4,6 +4,7 @@ function MessageInput({ onSendMessage, disabled }) {
   const [message, setMessage] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [recognition, setRecognition] = useState(null);
+  const [recordingTimeout, setRecordingTimeout] = useState(null);
   const inputRef = useRef(null);
 
   useEffect(() => {
