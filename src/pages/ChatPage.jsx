@@ -28,8 +28,20 @@ function ChatPage() {
         body: JSON.stringify({ text }),
       });
 
+      if (!response.ok) {
+        // Try to get error details without consuming the body stream
+        let errorMessage = `HTTP error! status: ${response.status}`;
+        try {
+          const errorData = await response.text();
+          if (errorData) errorMessage += ` - ${errorData}`;
+        } catch (e) {
+          // Ignore if we can't read the error response
+        }
+        throw new Error(errorMessage);
+      }
+
       const data = await response.json();
-      
+
       // Add AI response to chat
       const aiMessage = {
         id: Date.now() + 1,
@@ -38,15 +50,23 @@ function ChatPage() {
         timestamp: new Date(),
         audioUrl: data.audioUrl
       };
-      
+
       setMessages(prev => [...prev, aiMessage]);
     } catch (error) {
       console.error('Error sending message:', error);
       
-      // Add error message
+      // Add error message with more specific info
+      let errorText = 'Sorry, I encountered an error. Please try again.';
+
+      if (error.message.includes('Failed to fetch') || error.message.includes('ECONNREFUSED')) {
+        errorText = 'Unable to connect to the AI backend. Please make sure the backend server is running on port 5000.';
+      } else if (error.message.includes('status: 500')) {
+        errorText = 'The AI service is experiencing issues. Please try again in a moment.';
+      }
+
       const errorMessage = {
         id: Date.now() + 1,
-        text: 'Sorry, I encountered an error. Please try again.',
+        text: errorText,
         sender: 'ai',
         timestamp: new Date()
       };
