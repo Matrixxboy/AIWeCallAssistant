@@ -113,6 +113,7 @@ function CallingPage() {
 
     // Cleanup on unmount
     return () => {
+      clearTimeout(connectionTimeout);
       if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
       }
