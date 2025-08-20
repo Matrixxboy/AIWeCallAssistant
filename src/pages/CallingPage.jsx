@@ -347,9 +347,14 @@ function CallingPage() {
                   </div>
                   <button
                     onClick={startCall}
-                    className="w-full py-3 bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors font-medium"
+                    disabled={!isSignalingAvailable}
+                    className={`w-full py-3 text-white rounded-md transition-colors font-medium ${
+                      isSignalingAvailable
+                        ? 'bg-green-600 hover:bg-green-700'
+                        : 'bg-gray-600 cursor-not-allowed opacity-50'
+                    }`}
                   >
-                    Start Call
+                    {isSignalingAvailable ? 'Start Call' : 'Service Unavailable'}
                   </button>
                 </div>
               </div>
