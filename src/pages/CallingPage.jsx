@@ -108,6 +108,7 @@ function CallingPage() {
     // Set a timeout to check if connection is established
     const connectionTimeout = setTimeout(() => {
       if (!socketConnection.connected) {
+        setIsSignalingAvailable(false);
         setErrorMessage('Voice calling is currently unavailable in this environment. The feature requires a signaling server.');
         socketConnection.disconnect();
       }
