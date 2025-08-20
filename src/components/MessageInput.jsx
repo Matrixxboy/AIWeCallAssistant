@@ -5,98 +5,133 @@ function MessageInput({ onSendMessage, disabled }) {
   const [isRecording, setIsRecording] = useState(false);
   const [recognition, setRecognition] = useState(null);
   const [recordingTimeout, setRecordingTimeout] = useState(null);
+  const [microphonePermission, setMicrophonePermission] = useState('prompt');
+  const [speechRecognitionSupported, setSpeechRecognitionSupported] = useState(false);
   const inputRef = useRef(null);
 
   useEffect(() => {
-    // Initialize Speech Recognition
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      const recognitionInstance = new SpeechRecognition();
-
-      recognitionInstance.continuous = false;
-      recognitionInstance.interimResults = true;
-      recognitionInstance.lang = 'en-US';
-      recognitionInstance.maxAlternatives = 1;
-
-      recognitionInstance.onstart = () => {
-        console.log('Speech recognition started');
-        setIsRecording(true);
-      };
-
-      recognitionInstance.onresult = (event) => {
-        console.log('Speech recognition result:', event);
-        let finalTranscript = '';
-        let interimTranscript = '';
-
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalTranscript += transcript;
-          } else {
-            interimTranscript += transcript;
-          }
-        }
-
-        if (finalTranscript) {
-          console.log('Final transcript:', finalTranscript);
-          setMessage(finalTranscript);
-          handleSend(finalTranscript);
-        } else if (interimTranscript) {
-          console.log('Interim transcript:', interimTranscript);
-          setMessage(interimTranscript);
-        }
-      };
-
-      recognitionInstance.onend = () => {
-        console.log('Speech recognition ended');
-        setIsRecording(false);
-        if (recordingTimeout) {
-          clearTimeout(recordingTimeout);
-          setRecordingTimeout(null);
-        }
-      };
-
-      recognitionInstance.onerror = (event) => {
-        console.error('Speech recognition error:', event.error);
-        setIsRecording(false);
-        if (recordingTimeout) {
-          clearTimeout(recordingTimeout);
-          setRecordingTimeout(null);
-        }
-
-        let errorMessage = 'Speech recognition error: ';
-        switch (event.error) {
-          case 'no-speech':
-            errorMessage += 'No speech detected. Please try speaking closer to the microphone.';
-            break;
-          case 'audio-capture':
-            errorMessage += 'Microphone access denied. Please check your microphone permissions.';
-            break;
-          case 'not-allowed':
-            errorMessage += 'Microphone access not allowed. Please grant microphone permissions.';
-            break;
-          case 'network':
-            errorMessage += 'Network error occurred during speech recognition.';
-            break;
-          default:
-            errorMessage += event.error;
-        }
-
-        alert(errorMessage);
-      };
-
-      recognitionInstance.onnomatch = () => {
-        console.log('No speech match found');
-        setIsRecording(false);
-        if (recordingTimeout) {
-          clearTimeout(recordingTimeout);
-          setRecordingTimeout(null);
-        }
-        alert('No speech was recognized. Please try speaking more clearly.');
-      };
-
-      setRecognition(recognitionInstance);
+    // Check browser support
+    const isSupported = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
+    setSpeechRecognitionSupported(isSupported);
+    
+    if (!isSupported) {
+      console.warn('Speech recognition not supported in this browser');
+      return;
     }
+
+    // Check microphone permissions
+    navigator.permissions.query({ name: 'microphone' }).then((result) => {
+      setMicrophonePermission(result.state);
+      console.log('Microphone permission:', result.state);
+      
+      result.onchange = () => {
+        setMicrophonePermission(result.state);
+        console.log('Microphone permission changed to:', result.state);
+      };
+    }).catch((error) => {
+      console.warn('Permission query not supported:', error);
+    });
+
+    // Initialize Speech Recognition
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognitionInstance = new SpeechRecognition();
+
+    recognitionInstance.continuous = false;
+    recognitionInstance.interimResults = true;
+    recognitionInstance.lang = 'en-US';
+    recognitionInstance.maxAlternatives = 1;
+
+    recognitionInstance.onstart = () => {
+      console.log('🎤 Speech recognition started');
+      setIsRecording(true);
+    };
+
+    recognitionInstance.onresult = (event) => {
+      console.log('🎯 Speech recognition result:', event);
+      let finalTranscript = '';
+      let interimTranscript = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        const confidence = event.results[i][0].confidence;
+        
+        console.log(`Result ${i}: "${transcript}" (confidence: ${confidence}, final: ${event.results[i].isFinal})`);
+        
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript;
+        } else {
+          interimTranscript += transcript;
+        }
+      }
+
+      if (finalTranscript) {
+        console.log('✅ Final transcript:', finalTranscript);
+        setMessage(finalTranscript);
+        handleSend(finalTranscript);
+      } else if (interimTranscript) {
+        console.log('⏳ Interim transcript:', interimTranscript);
+        setMessage(interimTranscript);
+      }
+    };
+
+    recognitionInstance.onend = () => {
+      console.log('🔇 Speech recognition ended');
+      setIsRecording(false);
+      if (recordingTimeout) {
+        clearTimeout(recordingTimeout);
+        setRecordingTimeout(null);
+      }
+    };
+
+    recognitionInstance.onerror = (event) => {
+      console.error('❌ Speech recognition error:', event.error, event);
+      setIsRecording(false);
+      if (recordingTimeout) {
+        clearTimeout(recordingTimeout);
+        setRecordingTimeout(null);
+      }
+
+      let errorMessage = 'Speech recognition error: ';
+      switch (event.error) {
+        case 'no-speech':
+          errorMessage += 'No speech detected. Please try speaking closer to the microphone.';
+          break;
+        case 'audio-capture':
+          errorMessage += 'Microphone access denied. Please check your microphone permissions.';
+          break;
+        case 'not-allowed':
+          errorMessage += 'Microphone access not allowed. Please grant microphone permissions in your browser settings.';
+          break;
+        case 'network':
+          errorMessage += 'Network error occurred during speech recognition. Speech recognition requires an internet connection.';
+          break;
+        case 'service-not-allowed':
+          errorMessage += 'Speech recognition service not allowed. This feature may require HTTPS.';
+          break;
+        case 'bad-grammar':
+          errorMessage += 'Grammar compilation error.';
+          break;
+        case 'language-not-supported':
+          errorMessage += 'Language not supported.';
+          break;
+        default:
+          errorMessage += event.error;
+      }
+
+      alert(errorMessage);
+    };
+
+    recognitionInstance.onnomatch = () => {
+      console.log('❓ No speech match found');
+      setIsRecording(false);
+      if (recordingTimeout) {
+        clearTimeout(recordingTimeout);
+        setRecordingTimeout(null);
+      }
+      alert('No speech was recognized. Please try speaking more clearly.');
+    };
+
+    setRecognition(recognitionInstance);
 
     // Cleanup on unmount
     return () => {
@@ -104,7 +139,7 @@ function MessageInput({ onSendMessage, disabled }) {
         clearTimeout(recordingTimeout);
       }
     };
-  }, [recordingTimeout]);
+  }, []);
 
   const handleSend = (textToSend = message) => {
     if (textToSend.trim() && !disabled) {
@@ -121,12 +156,24 @@ function MessageInput({ onSendMessage, disabled }) {
   };
 
   const toggleRecording = async () => {
+    console.log('🎯 Toggle recording clicked');
+    console.log('Speech recognition supported:', speechRecognitionSupported);
+    console.log('Microphone permission:', microphonePermission);
+    console.log('Recognition instance:', recognition);
+    console.log('Currently recording:', isRecording);
+
+    if (!speechRecognitionSupported) {
+      alert('Speech recognition is not supported in your browser. Please use Chrome, Edge, or Safari.');
+      return;
+    }
+
     if (!recognition) {
-      alert('Speech recognition is not supported in your browser');
+      alert('Speech recognition is not initialized');
       return;
     }
 
     if (isRecording) {
+      console.log('🛑 Stopping recording');
       recognition.stop();
       if (recordingTimeout) {
         clearTimeout(recordingTimeout);
@@ -134,14 +181,22 @@ function MessageInput({ onSendMessage, disabled }) {
       }
     } else {
       try {
-        // Check microphone permissions first
-        await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log('🎤 Starting recording - requesting microphone access');
+        
+        // Request microphone permissions first
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log('✅ Microphone access granted');
+        
+        // Stop the stream immediately as we only needed it for permission
+        stream.getTracks().forEach(track => track.stop());
 
+        console.log('🚀 Starting speech recognition');
         setIsRecording(true);
         recognition.start();
 
         // Set a timeout to stop recording after 30 seconds
         const timeout = setTimeout(() => {
+          console.log('⏰ Recording timeout reached');
           if (recognition && isRecording) {
             recognition.stop();
             alert('Recording stopped due to timeout. Please try again.');
@@ -151,10 +206,37 @@ function MessageInput({ onSendMessage, disabled }) {
         setRecordingTimeout(timeout);
 
       } catch (error) {
-        console.error('Microphone access error:', error);
-        alert('Unable to access microphone. Please check your browser permissions and try again.');
+        console.error('❌ Microphone access error:', error);
+        
+        let errorMessage = 'Unable to access microphone. ';
+        if (error.name === 'NotAllowedError') {
+          errorMessage += 'Please grant microphone permissions in your browser settings and refresh the page.';
+        } else if (error.name === 'NotFoundError') {
+          errorMessage += 'No microphone found. Please connect a microphone and try again.';
+        } else if (error.name === 'NotSupportedError') {
+          errorMessage += 'This browser does not support microphone access over HTTP. Please use HTTPS.';
+        } else {
+          errorMessage += 'Please check your browser permissions and try again.';
+        }
+        
+        alert(errorMessage);
       }
     }
+  };
+
+  const getMicrophoneButtonStyle = () => {
+    if (disabled) return 'bg-gray-600 cursor-not-allowed';
+    if (!speechRecognitionSupported) return 'bg-gray-600 cursor-not-allowed';
+    if (microphonePermission === 'denied') return 'bg-red-600 cursor-not-allowed';
+    if (isRecording) return 'bg-red-600 hover:bg-red-700 animate-pulse';
+    return 'bg-blue-600 hover:bg-blue-700';
+  };
+
+  const getMicrophoneButtonTitle = () => {
+    if (!speechRecognitionSupported) return 'Speech recognition not supported in this browser';
+    if (microphonePermission === 'denied') return 'Microphone access denied - please check browser settings';
+    if (isRecording) return 'Stop recording (or speak now)';
+    return 'Start voice recording';
   };
 
   return (
@@ -163,13 +245,9 @@ function MessageInput({ onSendMessage, disabled }) {
         {/* Voice Input Button */}
         <button
           onClick={toggleRecording}
-          disabled={disabled}
-          className={`p-3 rounded-full transition-all duration-200 flex-shrink-0 ${
-            isRecording
-              ? 'bg-red-600 hover:bg-red-700 animate-pulse'
-              : 'bg-blue-600 hover:bg-blue-700'
-          } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-          title={isRecording ? 'Stop recording' : 'Start voice recording'}
+          disabled={disabled || !speechRecognitionSupported || microphonePermission === 'denied'}
+          className={`p-3 rounded-full transition-all duration-200 flex-shrink-0 ${getMicrophoneButtonStyle()}`}
+          title={getMicrophoneButtonTitle()}
         >
           {isRecording ? (
             <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -189,7 +267,15 @@ function MessageInput({ onSendMessage, disabled }) {
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder={isRecording ? 'Listening...' : 'Type your message or use voice input...'}
+            placeholder={
+              isRecording 
+                ? 'Listening... Speak clearly into your microphone' 
+                : !speechRecognitionSupported 
+                  ? 'Type your message (voice recognition not supported)...'
+                  : microphonePermission === 'denied'
+                    ? 'Type your message (microphone access denied)...'
+                    : 'Type your message or use voice input...'
+            }
             disabled={disabled || isRecording}
             className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none min-h-[44px] max-h-32"
             rows="1"
@@ -225,6 +311,22 @@ function MessageInput({ onSendMessage, disabled }) {
           </div>
           <div className="text-xs text-gray-500 mt-1">
             Click the microphone button again to stop recording
+          </div>
+        </div>
+      )}
+
+      {!speechRecognitionSupported && (
+        <div className="mt-2 text-center">
+          <div className="text-xs text-yellow-400">
+            ⚠️ Voice recognition not supported. Please use Chrome, Edge, or Safari for voice features.
+          </div>
+        </div>
+      )}
+
+      {microphonePermission === 'denied' && (
+        <div className="mt-2 text-center">
+          <div className="text-xs text-red-400">
+            ❌ Microphone access denied. Please enable microphone permissions in your browser settings.
           </div>
         </div>
       )}
