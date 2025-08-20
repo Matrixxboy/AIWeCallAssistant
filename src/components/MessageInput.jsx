@@ -101,7 +101,7 @@ function MessageInput({ onSendMessage, disabled }) {
     }
   };
 
-  const toggleRecording = () => {
+  const toggleRecording = async () => {
     if (!recognition) {
       alert('Speech recognition is not supported in your browser');
       return;
@@ -109,9 +109,32 @@ function MessageInput({ onSendMessage, disabled }) {
 
     if (isRecording) {
       recognition.stop();
+      if (recordingTimeout) {
+        clearTimeout(recordingTimeout);
+        setRecordingTimeout(null);
+      }
     } else {
-      setIsRecording(true);
-      recognition.start();
+      try {
+        // Check microphone permissions first
+        await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        setIsRecording(true);
+        recognition.start();
+
+        // Set a timeout to stop recording after 30 seconds
+        const timeout = setTimeout(() => {
+          if (recognition && isRecording) {
+            recognition.stop();
+            alert('Recording stopped due to timeout. Please try again.');
+          }
+        }, 30000);
+
+        setRecordingTimeout(timeout);
+
+      } catch (error) {
+        console.error('Microphone access error:', error);
+        alert('Unable to access microphone. Please check your browser permissions and try again.');
+      }
     }
   };
 
