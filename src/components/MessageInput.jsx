@@ -4,6 +4,7 @@ function MessageInput({ onSendMessage, disabled }) {
   const [message, setMessage] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [recognition, setRecognition] = useState(null);
+  const [recordingTimeout, setRecordingTimeout] = useState(null);
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -11,29 +12,99 @@ function MessageInput({ onSendMessage, disabled }) {
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       const recognitionInstance = new SpeechRecognition();
-      
+
       recognitionInstance.continuous = false;
-      recognitionInstance.interimResults = false;
+      recognitionInstance.interimResults = true;
       recognitionInstance.lang = 'en-US';
-      
+      recognitionInstance.maxAlternatives = 1;
+
+      recognitionInstance.onstart = () => {
+        console.log('Speech recognition started');
+        setIsRecording(true);
+      };
+
       recognitionInstance.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        setMessage(transcript);
-        handleSend(transcript);
+        console.log('Speech recognition result:', event);
+        let finalTranscript = '';
+        let interimTranscript = '';
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript;
+          } else {
+            interimTranscript += transcript;
+          }
+        }
+
+        if (finalTranscript) {
+          console.log('Final transcript:', finalTranscript);
+          setMessage(finalTranscript);
+          handleSend(finalTranscript);
+        } else if (interimTranscript) {
+          console.log('Interim transcript:', interimTranscript);
+          setMessage(interimTranscript);
+        }
       };
-      
+
       recognitionInstance.onend = () => {
+        console.log('Speech recognition ended');
         setIsRecording(false);
+        if (recordingTimeout) {
+          clearTimeout(recordingTimeout);
+          setRecordingTimeout(null);
+        }
       };
-      
+
       recognitionInstance.onerror = (event) => {
         console.error('Speech recognition error:', event.error);
         setIsRecording(false);
+        if (recordingTimeout) {
+          clearTimeout(recordingTimeout);
+          setRecordingTimeout(null);
+        }
+
+        let errorMessage = 'Speech recognition error: ';
+        switch (event.error) {
+          case 'no-speech':
+            errorMessage += 'No speech detected. Please try speaking closer to the microphone.';
+            break;
+          case 'audio-capture':
+            errorMessage += 'Microphone access denied. Please check your microphone permissions.';
+            break;
+          case 'not-allowed':
+            errorMessage += 'Microphone access not allowed. Please grant microphone permissions.';
+            break;
+          case 'network':
+            errorMessage += 'Network error occurred during speech recognition.';
+            break;
+          default:
+            errorMessage += event.error;
+        }
+
+        alert(errorMessage);
       };
-      
+
+      recognitionInstance.onnomatch = () => {
+        console.log('No speech match found');
+        setIsRecording(false);
+        if (recordingTimeout) {
+          clearTimeout(recordingTimeout);
+          setRecordingTimeout(null);
+        }
+        alert('No speech was recognized. Please try speaking more clearly.');
+      };
+
       setRecognition(recognitionInstance);
     }
-  }, []);
+
+    // Cleanup on unmount
+    return () => {
+      if (recordingTimeout) {
+        clearTimeout(recordingTimeout);
+      }
+    };
+  }, [recordingTimeout]);
 
   const handleSend = (textToSend = message) => {
     if (textToSend.trim() && !disabled) {
@@ -49,7 +120,7 @@ function MessageInput({ onSendMessage, disabled }) {
     }
   };
 
-  const toggleRecording = () => {
+  const toggleRecording = async () => {
     if (!recognition) {
       alert('Speech recognition is not supported in your browser');
       return;
@@ -57,9 +128,32 @@ function MessageInput({ onSendMessage, disabled }) {
 
     if (isRecording) {
       recognition.stop();
+      if (recordingTimeout) {
+        clearTimeout(recordingTimeout);
+        setRecordingTimeout(null);
+      }
     } else {
-      setIsRecording(true);
-      recognition.start();
+      try {
+        // Check microphone permissions first
+        await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        setIsRecording(true);
+        recognition.start();
+
+        // Set a timeout to stop recording after 30 seconds
+        const timeout = setTimeout(() => {
+          if (recognition && isRecording) {
+            recognition.stop();
+            alert('Recording stopped due to timeout. Please try again.');
+          }
+        }, 30000);
+
+        setRecordingTimeout(timeout);
+
+      } catch (error) {
+        console.error('Microphone access error:', error);
+        alert('Unable to access microphone. Please check your browser permissions and try again.');
+      }
     }
   };
 
@@ -125,8 +219,13 @@ function MessageInput({ onSendMessage, disabled }) {
       </div>
       
       {isRecording && (
-        <div className="mt-2 text-center text-sm text-red-400 animate-pulse">
-          🎤 Recording... Speak now
+        <div className="mt-2 text-center">
+          <div className="text-sm text-red-400 animate-pulse">
+            🎤 Recording... Speak clearly into your microphone
+          </div>
+          <div className="text-xs text-gray-500 mt-1">
+            Click the microphone button again to stop recording
+          </div>
         </div>
       )}
     </div>
