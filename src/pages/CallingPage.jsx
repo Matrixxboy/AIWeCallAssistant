@@ -18,23 +18,21 @@ function CallingPage() {
   const remoteAudioRef = useRef(null);
 
   useEffect(() => {
-    // Initialize Socket.IO connection with dynamic URL
-    const getSocketUrl = () => {
-      const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
-      const host = window.location.hostname;
+    // Check if we're in a hosted environment where signaling won't be available
+    const isLocalDevelopment = window.location.hostname === 'localhost' ||
+                              window.location.hostname === '127.0.0.1' ||
+                              window.location.hostname === '0.0.0.0';
 
-      // Try different approaches based on environment
-      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-        // Local development - connect directly to signaling server
-        return 'http://localhost:5001';
-      } else {
-        // Hosted environment - try to connect through same host with different port
-        // This might not work in all hosted environments, which is why we have fallbacks
-        return `${protocol}//${host}:5001`;
-      }
-    };
+    if (!isLocalDevelopment) {
+      // In hosted environments, immediately disable voice calling
+      console.log('Voice calling disabled: Hosted environment detected');
+      setIsSignalingAvailable(false);
+      setErrorMessage('Voice calling is currently unavailable in this hosted environment.');
+      return; // Don't attempt Socket.IO connection
+    }
 
-    const socketConnection = io(getSocketUrl(), {
+    // Only attempt connection in local development
+    const socketConnection = io('http://localhost:5001', {
       transports: ['websocket', 'polling'],
       timeout: 5000,
       forceNew: true
