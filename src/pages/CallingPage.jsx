@@ -17,8 +17,24 @@ function CallingPage() {
   const remoteAudioRef = useRef(null);
 
   useEffect(() => {
-    // Initialize Socket.IO connection
-    const socketConnection = io('http://localhost:5001');
+    // Initialize Socket.IO connection with dynamic URL
+    const getSocketUrl = () => {
+      // In development, use localhost
+      if (process.env.NODE_ENV === 'development') {
+        return 'http://localhost:5001';
+      }
+      // In production, try to connect to the signaling server through the same host
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = window.location.hostname;
+      const port = window.location.port ? `:${window.location.port}` : '';
+      return `${protocol}//${host}${port}/signaling`;
+    };
+
+    const socketConnection = io(getSocketUrl(), {
+      transports: ['websocket', 'polling'],
+      timeout: 10000,
+      forceNew: true
+    });
     setSocket(socketConnection);
 
     // Socket event listeners
