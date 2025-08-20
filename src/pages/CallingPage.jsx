@@ -92,8 +92,24 @@ function CallingPage() {
 
     socketConnection.on('connect_error', (error) => {
       console.error('Socket connection error:', error);
-      setErrorMessage('Failed to connect to signaling server. Please try again.');
+      setErrorMessage('Voice calling is currently unavailable. The signaling server could not be reached.');
+      setCallState('idle');
     });
+
+    socketConnection.on('disconnect', (reason) => {
+      console.log('Socket disconnected:', reason);
+      if (reason === 'io server disconnect') {
+        setErrorMessage('Voice calling service is temporarily unavailable.');
+      }
+    });
+
+    // Set a timeout to check if connection is established
+    const connectionTimeout = setTimeout(() => {
+      if (!socketConnection.connected) {
+        setErrorMessage('Voice calling is currently unavailable in this environment. The feature requires a signaling server.');
+        socketConnection.disconnect();
+      }
+    }, 5000);
 
     // Cleanup on unmount
     return () => {
