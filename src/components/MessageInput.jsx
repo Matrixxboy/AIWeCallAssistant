@@ -219,8 +219,13 @@ function MessageInput({ onSendMessage, disabled }) {
       </div>
       
       {isRecording && (
-        <div className="mt-2 text-center text-sm text-red-400 animate-pulse">
-          🎤 Recording... Speak now
+        <div className="mt-2 text-center">
+          <div className="text-sm text-red-400 animate-pulse">
+            🎤 Recording... Speak clearly into your microphone
+          </div>
+          <div className="text-xs text-gray-500 mt-1">
+            Click the microphone button again to stop recording
+          </div>
         </div>
       )}
     </div>
