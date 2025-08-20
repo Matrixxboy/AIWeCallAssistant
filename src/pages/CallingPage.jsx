@@ -12,6 +12,7 @@ function CallingPage() {
   const [participantCount, setParticipantCount] = useState(0);
   const [isInitiator, setIsInitiator] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [isSignalingAvailable, setIsSignalingAvailable] = useState(true);
   
   const localAudioRef = useRef(null);
   const remoteAudioRef = useRef(null);
