@@ -29,7 +29,15 @@ function ChatPage() {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        // Try to get error details without consuming the body stream
+        let errorMessage = `HTTP error! status: ${response.status}`;
+        try {
+          const errorData = await response.text();
+          if (errorData) errorMessage += ` - ${errorData}`;
+        } catch (e) {
+          // Ignore if we can't read the error response
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
