@@ -30,16 +30,39 @@ STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 
 os.makedirs(STATIC_DIR, exist_ok=True)
 
 
-def get_gemini_response(text):
+def get_gemini_response(text, conversation_history=None, room_id=None):
     """
     Sends text to the Gemini API and returns the model's response.
+    Uses conversation history to maintain context.
     """
     if not model:
         return "Sorry, the AI model is not configured correctly."
     try:
-        # Start a chat session to maintain context (optional but good practice)
-        chat = model.start_chat(history=[])
-        response = chat.send_message(text)
+        # Build context from conversation history
+        history = []
+        if conversation_history:
+            for msg in conversation_history:
+                if msg['role'] == 'user':
+                    history.append({
+                        'role': 'user',
+                        'parts': [msg['content']]
+                    })
+                elif msg['role'] == 'assistant':
+                    history.append({
+                        'role': 'model',
+                        'parts': [msg['content']]
+                    })
+
+        # Start chat with context
+        chat = model.start_chat(history=history)
+
+        # Add room context to the prompt
+        if room_id:
+            context_prompt = f"[Room {room_id}] {text}"
+        else:
+            context_prompt = text
+
+        response = chat.send_message(context_prompt)
         return response.text
     except Exception as e:
         print(f"Error getting response from Gemini: {str(e)}")
