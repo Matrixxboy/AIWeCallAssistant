@@ -1,0 +1,136 @@
+import React, { useState, useRef, useEffect } from 'react';
+
+function MessageInput({ onSendMessage, disabled }) {
+  const [message, setMessage] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
+  const [recognition, setRecognition] = useState(null);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    // Initialize Speech Recognition
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognitionInstance = new SpeechRecognition();
+      
+      recognitionInstance.continuous = false;
+      recognitionInstance.interimResults = false;
+      recognitionInstance.lang = 'en-US';
+      
+      recognitionInstance.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        setMessage(transcript);
+        handleSend(transcript);
+      };
+      
+      recognitionInstance.onend = () => {
+        setIsRecording(false);
+      };
+      
+      recognitionInstance.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        setIsRecording(false);
+      };
+      
+      setRecognition(recognitionInstance);
+    }
+  }, []);
+
+  const handleSend = (textToSend = message) => {
+    if (textToSend.trim() && !disabled) {
+      onSendMessage(textToSend.trim());
+      setMessage('');
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  const toggleRecording = () => {
+    if (!recognition) {
+      alert('Speech recognition is not supported in your browser');
+      return;
+    }
+
+    if (isRecording) {
+      recognition.stop();
+    } else {
+      setIsRecording(true);
+      recognition.start();
+    }
+  };
+
+  return (
+    <div className="border-t border-gray-700 p-4">
+      <div className="flex items-end space-x-3">
+        {/* Voice Input Button */}
+        <button
+          onClick={toggleRecording}
+          disabled={disabled}
+          className={`p-3 rounded-full transition-all duration-200 flex-shrink-0 ${
+            isRecording
+              ? 'bg-red-600 hover:bg-red-700 animate-pulse'
+              : 'bg-blue-600 hover:bg-blue-700'
+          } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+          title={isRecording ? 'Stop recording' : 'Start voice recording'}
+        >
+          {isRecording ? (
+            <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clipRule="evenodd" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
+            </svg>
+          )}
+        </button>
+
+        {/* Text Input */}
+        <div className="flex-1 relative">
+          <textarea
+            ref={inputRef}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder={isRecording ? 'Listening...' : 'Type your message or use voice input...'}
+            disabled={disabled || isRecording}
+            className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none min-h-[44px] max-h-32"
+            rows="1"
+            style={{ height: 'auto' }}
+            onInput={(e) => {
+              e.target.style.height = 'auto';
+              e.target.style.height = e.target.scrollHeight + 'px';
+            }}
+          />
+        </div>
+
+        {/* Send Button */}
+        <button
+          onClick={() => handleSend()}
+          disabled={disabled || !message.trim() || isRecording}
+          className={`p-3 rounded-full transition-colors flex-shrink-0 ${
+            disabled || !message.trim() || isRecording
+              ? 'bg-gray-600 cursor-not-allowed'
+              : 'bg-green-600 hover:bg-green-700'
+          }`}
+          title="Send message"
+        >
+          <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+          </svg>
+        </button>
+      </div>
+      
+      {isRecording && (
+        <div className="mt-2 text-center text-sm text-red-400 animate-pulse">
+          🎤 Recording... Speak now
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default MessageInput;
