@@ -50,11 +50,19 @@ function MessageInput({ onSendMessage, disabled }) {
       recognitionInstance.onend = () => {
         console.log('Speech recognition ended');
         setIsRecording(false);
+        if (recordingTimeout) {
+          clearTimeout(recordingTimeout);
+          setRecordingTimeout(null);
+        }
       };
 
       recognitionInstance.onerror = (event) => {
         console.error('Speech recognition error:', event.error);
         setIsRecording(false);
+        if (recordingTimeout) {
+          clearTimeout(recordingTimeout);
+          setRecordingTimeout(null);
+        }
 
         let errorMessage = 'Speech recognition error: ';
         switch (event.error) {
@@ -80,12 +88,23 @@ function MessageInput({ onSendMessage, disabled }) {
       recognitionInstance.onnomatch = () => {
         console.log('No speech match found');
         setIsRecording(false);
+        if (recordingTimeout) {
+          clearTimeout(recordingTimeout);
+          setRecordingTimeout(null);
+        }
         alert('No speech was recognized. Please try speaking more clearly.');
       };
 
       setRecognition(recognitionInstance);
     }
-  }, []);
+
+    // Cleanup on unmount
+    return () => {
+      if (recordingTimeout) {
+        clearTimeout(recordingTimeout);
+      }
+    };
+  }, [recordingTimeout]);
 
   const handleSend = (textToSend = message) => {
     if (textToSend.trim() && !disabled) {
