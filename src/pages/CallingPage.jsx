@@ -93,7 +93,8 @@ function CallingPage() {
 
     socketConnection.on('connect_error', (error) => {
       console.error('Socket connection error:', error);
-      setErrorMessage('Voice calling is currently unavailable. The signaling server could not be reached.');
+      setIsSignalingAvailable(false);
+      setErrorMessage('Voice calling is currently unavailable. This feature requires a WebRTC signaling server.');
       setCallState('idle');
     });
 
