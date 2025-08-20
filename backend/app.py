@@ -72,15 +72,17 @@ def get_gemini_response(text, conversation_history=None, room_id=None):
 @app.route('/api/chat', methods=['POST'])
 def chat():
     try:
-        # Get the text from the request
+        # Get the data from the request
         data = request.get_json()
         user_text = data.get('text', '')
-        
+        room_id = data.get('roomId', '')
+        conversation_history = data.get('conversationHistory', [])
+
         if not user_text:
             return jsonify({'error': 'No text provided'}), 400
-        
-        # --- Generate AI response using Gemini API ---
-        ai_response = get_gemini_response(user_text)
+
+        # --- Generate AI response using Gemini API with context ---
+        ai_response = get_gemini_response(user_text, conversation_history, room_id)
         
         # Generate audio using gTTS
         tts = gTTS(text=ai_response, lang='en', slow=False)
