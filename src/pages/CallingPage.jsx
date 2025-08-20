@@ -20,20 +20,23 @@ function CallingPage() {
   useEffect(() => {
     // Initialize Socket.IO connection with dynamic URL
     const getSocketUrl = () => {
-      // In development, use localhost
-      if (process.env.NODE_ENV === 'development') {
-        return 'http://localhost:5001';
-      }
-      // In production, try to connect to the signaling server through the same host
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
       const host = window.location.hostname;
-      const port = window.location.port ? `:${window.location.port}` : '';
-      return `${protocol}//${host}${port}/signaling`;
+
+      // Try different approaches based on environment
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        // Local development - connect directly to signaling server
+        return 'http://localhost:5001';
+      } else {
+        // Hosted environment - try to connect through same host with different port
+        // This might not work in all hosted environments, which is why we have fallbacks
+        return `${protocol}//${host}:5001`;
+      }
     };
 
     const socketConnection = io(getSocketUrl(), {
       transports: ['websocket', 'polling'],
-      timeout: 10000,
+      timeout: 5000,
       forceNew: true
     });
     setSocket(socketConnection);
