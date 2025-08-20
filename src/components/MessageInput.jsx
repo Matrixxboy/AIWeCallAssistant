@@ -11,26 +11,77 @@ function MessageInput({ onSendMessage, disabled }) {
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       const recognitionInstance = new SpeechRecognition();
-      
+
       recognitionInstance.continuous = false;
-      recognitionInstance.interimResults = false;
+      recognitionInstance.interimResults = true;
       recognitionInstance.lang = 'en-US';
-      
-      recognitionInstance.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        setMessage(transcript);
-        handleSend(transcript);
+      recognitionInstance.maxAlternatives = 1;
+
+      recognitionInstance.onstart = () => {
+        console.log('Speech recognition started');
+        setIsRecording(true);
       };
-      
+
+      recognitionInstance.onresult = (event) => {
+        console.log('Speech recognition result:', event);
+        let finalTranscript = '';
+        let interimTranscript = '';
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript;
+          } else {
+            interimTranscript += transcript;
+          }
+        }
+
+        if (finalTranscript) {
+          console.log('Final transcript:', finalTranscript);
+          setMessage(finalTranscript);
+          handleSend(finalTranscript);
+        } else if (interimTranscript) {
+          console.log('Interim transcript:', interimTranscript);
+          setMessage(interimTranscript);
+        }
+      };
+
       recognitionInstance.onend = () => {
+        console.log('Speech recognition ended');
         setIsRecording(false);
       };
-      
+
       recognitionInstance.onerror = (event) => {
         console.error('Speech recognition error:', event.error);
         setIsRecording(false);
+
+        let errorMessage = 'Speech recognition error: ';
+        switch (event.error) {
+          case 'no-speech':
+            errorMessage += 'No speech detected. Please try speaking closer to the microphone.';
+            break;
+          case 'audio-capture':
+            errorMessage += 'Microphone access denied. Please check your microphone permissions.';
+            break;
+          case 'not-allowed':
+            errorMessage += 'Microphone access not allowed. Please grant microphone permissions.';
+            break;
+          case 'network':
+            errorMessage += 'Network error occurred during speech recognition.';
+            break;
+          default:
+            errorMessage += event.error;
+        }
+
+        alert(errorMessage);
       };
-      
+
+      recognitionInstance.onnomatch = () => {
+        console.log('No speech match found');
+        setIsRecording(false);
+        alert('No speech was recognized. Please try speaking more clearly.');
+      };
+
       setRecognition(recognitionInstance);
     }
   }, []);
