@@ -4,9 +4,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 const API_BASE_URL = 'http://localhost:5000'; // Replace with your actual backend URL
 
 function CallingPage() {
-  const [roomState, setRoomState] = useState('idle'); // idle, joined
-  const [roomId, setRoomId] = useState('');
-  const [joinRoomId, setJoinRoomId] = useState('');
+  const [sessionState, setSessionState] = useState('idle'); // idle, active
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [conversationHistory, setConversationHistory] = useState([]);
@@ -15,36 +13,48 @@ function CallingPage() {
 
   const recognitionRef = useRef(null);
   const conversationHistoryRef = useRef(conversationHistory);
+  const audioRef = useRef(null);
+  const chatContainerRef = useRef(null);
+
+  // Auto-scroll to the bottom of the chat
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  }, [conversationHistory, currentTranscript]);
+
 
   // Keep the ref updated with the latest history
   useEffect(() => {
     conversationHistoryRef.current = conversationHistory;
   }, [conversationHistory]);
 
-  const speakText = useCallback((text) => {
-    if (!('speechSynthesis' in window)) return;
+  const playAudio = useCallback((audioUrl) => {
+    if (!audioUrl) return;
 
-    window.speechSynthesis.cancel(); // Stop any ongoing speech
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1;
-    utterance.pitch = 1;
-    utterance.volume = 1;
-
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = (event) => {
-      console.error('Speech synthesis error:', event.error);
+    const audio = new Audio(audioUrl);
+    audio.onplay = () => setIsSpeaking(true);
+    audio.onended = () => {
       setIsSpeaking(false);
+      audioRef.current = null;
     };
-
-    window.speechSynthesis.speak(utterance);
+    audio.onerror = () => {
+      console.error('Audio playback error.');
+      setIsSpeaking(false);
+      audioRef.current = null;
+    };
+    audio.play();
+    audioRef.current = audio;
   }, []);
 
   const handleUserSpeech = useCallback(async (userText) => {
     if (!userText) return;
 
-    const userMessage = { role: 'user', content: userText, timestamp: new Date() };
+    const userMessage = { role: 'user', content: userText, timestamp: new Date().toISOString() };
     const newHistory = [...conversationHistoryRef.current, userMessage];
     setConversationHistory(newHistory);
 
@@ -54,8 +64,7 @@ function CallingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text: userText,
-          roomId: roomId,
-          conversationHistory: newHistory, // Send the most up-to-date history
+          conversationHistory: newHistory,
         }),
       });
 
@@ -65,15 +74,15 @@ function CallingPage() {
       }
 
       const data = await response.json();
-      const aiMessage = { role: 'assistant', content: data.responseText, timestamp: new Date() };
+      const aiMessage = { role: 'assistant', content: data.responseText, timestamp: new Date().toISOString() };
       setConversationHistory(prev => [...prev, aiMessage]);
-      speakText(data.responseText);
+      playAudio(data.audioUrl);
 
     } catch (error) {
       console.error('Error getting AI response:', error);
       setErrorMessage(error.message);
     }
-  }, [roomId, speakText]);
+  }, [playAudio]);
 
   useEffect(() => {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
@@ -86,7 +95,7 @@ function CallingPage() {
     const recognition = recognitionRef.current;
 
     recognition.continuous = false;
-    recognition.interimResults = true; // Get interim results for better UX
+    recognition.interimResults = true;
     recognition.lang = 'en-US';
 
     recognition.onstart = () => {
@@ -96,8 +105,8 @@ function CallingPage() {
     };
 
     recognition.onresult = (event) => {
-      let interim = '';
       let final = '';
+      let interim = '';
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         if (event.results[i].isFinal) {
           final += event.results[i][0].transcript;
@@ -113,7 +122,7 @@ function CallingPage() {
 
     recognition.onerror = (event) => {
       if (event.error !== 'no-speech') {
-         setErrorMessage(`Speech recognition error: ${event.error}`);
+        setErrorMessage(`Speech recognition error: ${event.error}`);
       }
     };
 
@@ -126,150 +135,152 @@ function CallingPage() {
     };
   }, [handleUserSpeech]);
 
-  const startListening = useCallback(() => {
-    if (recognitionRef.current && !isListening) {
-      try {
-        recognitionRef.current.start();
-      } catch (e) {
-        // Handle cases where it's already started
-        console.error("Could not start recognition: ", e);
-      }
+  const stopSpeaking = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      setIsSpeaking(false);
     }
-  }, [isListening]);
+  }, []);
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current && isListening) {
       recognitionRef.current.stop();
     }
   }, [isListening]);
-  
-  const stopSpeaking = useCallback(() => {
-    window.speechSynthesis.cancel();
-    setIsSpeaking(false);
-  }, []);
 
-  const joinRoom = useCallback(() => {
-    const targetRoomId = joinRoomId.trim() || Math.random().toString(36).substring(2, 8).toUpperCase();
-    setRoomId(targetRoomId);
-    setRoomState('joined');
-    setErrorMessage('');
-    
+  const startListening = useCallback(() => {
+    stopSpeaking();
+    if (recognitionRef.current && !isListening) {
+      try {
+        recognitionRef.current.start();
+      } catch (e) {
+        console.error("Could not start recognition: ", e);
+      }
+    }
+  }, [isListening, stopSpeaking]);
+
+  const startSession = useCallback(() => {
+    setSessionState('active');
     const welcomeMessage = {
       role: 'assistant',
-      content: `Welcome to AI Voice Chat Room ${targetRoomId}! I'm your AI assistant. Click the microphone to start talking.`,
-      timestamp: new Date()
+      content: "Welcome! I am Guru, your personal English tutor. How can I help you today?",
+      timestamp: new Date().toISOString()
     };
     setConversationHistory([welcomeMessage]);
-    speakText(welcomeMessage.content);
-  }, [joinRoomId, speakText]);
+    
+    fetch(`${API_BASE_URL}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: welcomeMessage.content })
+    })
+    .then(response => response.json())
+    .then(data => playAudio(data.audioUrl))
+    .catch(error => console.error('Error fetching welcome audio:', error));
+  }, [playAudio]);
 
-  const leaveRoom = useCallback(() => {
-    setRoomState('idle');
-    setRoomId('');
-    setJoinRoomId('');
+  const endSession = useCallback(() => {
+    // Save the current conversation to history
+    if (conversationHistory.length > 1) { // Only save if more than welcome message
+      const savedHistory = JSON.parse(localStorage.getItem('chatHistory') || '[]');
+      const newHistory = [...savedHistory, { id: Date.now(), timestamp: Date.now(), messages: conversationHistory }];
+      localStorage.setItem('chatHistory', JSON.stringify(newHistory));
+    }
+
+    setSessionState('idle');
     setConversationHistory([]);
     setCurrentTranscript('');
     setErrorMessage('');
     stopListening();
     stopSpeaking();
-  }, [stopListening, stopSpeaking]);
+  }, [conversationHistory, stopListening, stopSpeaking]);
 
   return (
-    <div className="max-w-4xl mx-auto p-4">
-      <div className="bg-gray-800 rounded-lg shadow-lg p-6 md:p-8">
-        <div className="text-center mb-8">
-          <h2 className="text-3xl font-bold text-white mb-2">AI Voice Chat Room</h2>
-          <p className="text-gray-400">Talk to a Gemini-powered AI assistant</p>
+    <div className="bg-gray-900 text-white h-screen flex flex-col font-sans">
+      {sessionState === 'idle' ? (
+        <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
+          <div className="mb-8">
+            <svg className="w-24 h-24 mx-auto text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"></path></svg>
+          </div>
+          <h1 className="text-3xl sm:text-4xl font-bold mb-4">AI English Tutor</h1>
+          <p className="text-gray-400 mb-8 max-w-md">Practice your English speaking, grammar, and vocabulary with a friendly AI assistant.</p>
+          <button
+            onClick={startSession}
+            className="px-6 py-3 sm:px-8 sm:py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-bold transition-transform transform hover:scale-105 text-base sm:text-lg"
+          >
+            Start New Session
+          </button>
         </div>
-
-        {errorMessage && (
-          <div className="mb-6 p-4 bg-red-900 border border-red-700 rounded-lg">
-            <p className="text-red-200 text-center">{errorMessage}</p>
-          </div>
-        )}
-
-        {roomState === 'idle' ? (
-          <div className="space-y-6">
-            <div className="text-center">
-              <div className="text-6xl mb-4">🤖</div>
-              <p className="text-gray-300 mb-6">Join a room to start a voice conversation with the AI.</p>
-            </div>
-            <div className="max-w-md mx-auto bg-gray-700 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-white mb-4 text-center">Enter Room</h3>
-              <div className="space-y-4">
-                <input
-                  type="text"
-                  value={joinRoomId}
-                  onChange={(e) => setJoinRoomId(e.target.value.toUpperCase())}
-                  placeholder="Enter Room ID or leave blank"
-                  className="w-full bg-gray-600 border border-gray-500 rounded-md px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  maxLength="6"
-                />
-                <button
-                  onClick={joinRoom}
-                  className="w-full py-3 bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors font-medium"
-                >
-                  Join or Create Room
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            <div className="text-center">
-              <div className="inline-block px-4 py-2 bg-gray-700 rounded-lg">
-                <span className="text-gray-300">Room ID: </span>
-                <span className="font-mono text-blue-400 text-lg">{roomId}</span>
-              </div>
-            </div>
-
-            <div className="flex justify-center items-center space-x-4">
+      ) : (
+        <div className="flex-1 flex flex-col lg:flex-row p-4 gap-4 overflow-hidden">
+          {/* Left Panel: Controls and Status */}
+          <div className="lg:w-1/3 flex flex-col items-center justify-center bg-gray-800 rounded-lg p-6 space-y-6">
+            <h1 className="text-2xl font-bold text-center">Conversation Controls</h1>
+            <div className="relative flex items-center justify-center w-full">
               <button
                 onClick={isListening ? stopListening : startListening}
-                className={`px-6 py-3 rounded-full text-white font-medium transition-all duration-200 flex items-center space-x-2 ${
-                  isListening ? 'bg-red-600 hover:bg-red-700 animate-pulse' : 'bg-blue-600 hover:bg-blue-700'
-                }`}
+                disabled={isSpeaking}
+                className={`w-32 h-32 rounded-full text-white font-medium transition-all duration-300 flex items-center justify-center shadow-lg ${
+                  isListening 
+                    ? 'bg-red-600 ring-4 ring-red-500 ring-opacity-50 animate-pulse' 
+                    : 'bg-blue-600 hover:bg-blue-700'
+                } ${isSpeaking ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                <span className="text-xl">🎤</span>
-                <span>{isListening ? 'Stop' : 'Speak'}</span>
-              </button>
-              <button
-                onClick={leaveRoom}
-                className="px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-full font-medium transition-colors"
-              >
-                Leave Room
+                <svg className="w-16 h-16" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z" />
+                </svg>
               </button>
             </div>
-
-            <div className="flex justify-center space-x-6 text-sm">
-                <div className={`flex items-center space-x-2 ${isListening ? 'text-red-400' : 'text-gray-500'}`}>
-                    <div className={`w-2 h-2 rounded-full ${isListening ? 'bg-red-400 animate-pulse' : 'bg-gray-500'}`}></div>
-                    <span>Listening</span>
-                </div>
-                <div className={`flex items-center space-x-2 ${isSpeaking ? 'text-blue-400' : 'text-gray-500'}`}>
-                    <div className={`w-2 h-2 rounded-full ${isSpeaking ? 'bg-blue-400 animate-pulse' : 'bg-gray-500'}`}></div>
-                    <span>AI Speaking</span>
-                </div>
+            <div className="text-center">
+              <p className="text-lg font-medium">
+                {isSpeaking ? 'AI is speaking...' : isListening ? 'Listening...' : 'Click the mic to speak'}
+              </p>
+              {isSpeaking && (
+                <button
+                  onClick={stopSpeaking}
+                  className="mt-4 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-full font-medium transition-colors text-sm"
+                  title="Stop AI Speaking"
+                >
+                  Stop Speaking
+                </button>
+              )}
             </div>
+            <button
+              onClick={endSession}
+              className="w-full mt-auto px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors"
+            >
+              End Session
+            </button>
+          </div>
 
-            <div className="bg-gray-700 rounded-lg p-4 min-h-[80px]">
-              <h4 className="text-sm font-medium text-gray-300 mb-2">Live Transcript:</h4>
-              <p className="text-white italic">{currentTranscript || "..."}</p>
-            </div>
-
-            <div className="bg-gray-900 rounded-lg p-4 max-h-80 overflow-y-auto space-y-3">
+          {/* Right Panel: Conversation History */}
+          <div className="flex-1 flex flex-col bg-gray-800 rounded-lg overflow-hidden">
+            <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4">
               {conversationHistory.map((msg, index) => (
-                <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`p-3 rounded-lg max-w-xs md:max-w-md ${msg.role === 'user' ? 'bg-blue-600' : 'bg-green-700'}`}>
+                <div key={index} className={`flex items-end gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  {msg.role === 'assistant' && <div className="w-8 h-8 rounded-full bg-green-700 flex items-center justify-center flex-shrink-0">🤖</div>}
+                  <div className={`p-3 rounded-lg max-w-xs md:max-w-md lg:max-w-lg ${msg.role === 'user' ? 'bg-blue-600 rounded-br-none' : 'bg-green-700 rounded-bl-none'}`}>
                     <p className="text-white text-sm">{msg.content}</p>
-                    <p className="text-gray-300 text-xs mt-1 text-right">{msg.timestamp.toLocaleTimeString()}</p>
+                    <p className="text-gray-400 text-xs mt-1 text-right">{new Date(msg.timestamp).toLocaleTimeString()}</p>
                   </div>
+                  {msg.role === 'user' && <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">👤</div>}
                 </div>
               ))}
+              {currentTranscript && (
+                <div className="flex justify-end">
+                  <div className="p-3 rounded-lg max-w-xs md:max-w-md bg-blue-600 opacity-70">
+                    <p className="text-white text-sm italic">{currentTranscript}</p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+      {errorMessage && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 p-4 bg-red-900 border border-red-700 rounded-lg shadow-lg">
+          <p className="text-red-200 text-center text-sm">{errorMessage}</p>
+        </div>
+      )}
     </div>
   );
 }

@@ -15,7 +15,7 @@ function ChatHistoryItem({ session, onDelete }) {
 
   const getPreview = () => {
     if (session.messages && session.messages.length > 0) {
-      const firstUserMessage = session.messages.find(m => m.sender === 'user');
+      const firstUserMessage = session.messages.find(m => m.role === 'user');
       return firstUserMessage ? firstUserMessage.text : 'No messages';
     }
     return 'No messages';
@@ -76,14 +76,19 @@ function ChatHistoryItem({ session, onDelete }) {
           {session.messages.map((message, index) => (
             <div
               key={index}
-              className={`text-sm ${
-                message.sender === 'user' ? 'text-blue-300' : 'text-green-300'
+              className={`text-sm p-2 rounded-md ${
+                message.role === 'user' ? 'bg-blue-900 text-blue-100' : 'bg-green-900 text-green-100'
               }`}
             >
-              <span className="font-medium">
-                {message.sender === 'user' ? '👤 You:' : '🤖 AI:'}
-              </span>
-              <span className="ml-2">{message.text}</span>
+              <div className="flex justify-between items-center">
+                <span className="font-medium">
+                  {message.role === 'user' ? '👤 You:' : '🤖 AI:'}
+                </span>
+                <span className="text-xs text-gray-400">
+                  {new Date(message.timestamp).toLocaleTimeString()}
+                </span>
+              </div>
+              <p className="ml-2 mt-1">{message.text}</p>
             </div>
           ))}
         </div>
