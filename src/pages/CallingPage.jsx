@@ -1,323 +1,221 @@
 import React, { useState, useRef, useEffect } from 'react';
-import io from 'socket.io-client';
 
 function CallingPage() {
-  const [callState, setCallState] = useState('idle'); // idle, connecting, connected, ended
-  const [localStream, setLocalStream] = useState(null);
-  const [remoteStream, setRemoteStream] = useState(null);
-  const [peerConnection, setPeerConnection] = useState(null);
-  const [socket, setSocket] = useState(null);
+  const [roomState, setRoomState] = useState('idle'); // idle, joined, listening, speaking
   const [roomId, setRoomId] = useState('');
   const [joinRoomId, setJoinRoomId] = useState('');
-  const [participantCount, setParticipantCount] = useState(0);
-  const [isInitiator, setIsInitiator] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [transcript, setTranscript] = useState('');
+  const [aiResponse, setAiResponse] = useState('');
+  const [conversationHistory, setConversationHistory] = useState([]);
   const [errorMessage, setErrorMessage] = useState('');
-  const [isSignalingAvailable, setIsSignalingAvailable] = useState(true);
+  const [recognitionSupported, setRecognitionSupported] = useState(true);
+  const [speechSupported, setSpeechSupported] = useState(true);
   
-  const localAudioRef = useRef(null);
-  const remoteAudioRef = useRef(null);
+  const recognitionRef = useRef(null);
+  const speechSynthesisRef = useRef(null);
 
   useEffect(() => {
-    // Check if we're in a hosted environment where signaling won't be available
-    const isLocalDevelopment = window.location.hostname === 'localhost' ||
-                              window.location.hostname === '127.0.0.1' ||
-                              window.location.hostname === '0.0.0.0';
-
-    if (!isLocalDevelopment) {
-      // In hosted environments, immediately disable voice calling
-      console.log('Voice calling disabled: Hosted environment detected');
-      setIsSignalingAvailable(false);
-      setErrorMessage('Voice calling is currently unavailable in this hosted environment.');
-      return; // Don't attempt Socket.IO connection
+    // Check for Web Speech API support
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      setRecognitionSupported(false);
+      setErrorMessage('Speech recognition is not supported in this browser. Please use Chrome or Edge.');
     }
 
-    // Only attempt connection in local development
-    const socketConnection = io('http://localhost:5001', {
-      transports: ['websocket', 'polling'],
-      timeout: 5000,
-      forceNew: true
-    });
-    setSocket(socketConnection);
+    if (!('speechSynthesis' in window)) {
+      setSpeechSupported(false);
+      setErrorMessage('Speech synthesis is not supported in this browser.');
+    }
 
-    // Only set up socket event listeners in local development
-    if (isLocalDevelopment) {
-      // Socket event listeners
-      socketConnection.on('room-joined', ({ roomId: joinedRoomId, participantCount: count, isInitiator: initiator }) => {
-        console.log('✅ Joined room:', joinedRoomId, 'Participants:', count, 'Initiator:', initiator);
-        setParticipantCount(count);
-        setIsInitiator(initiator);
-        setCallState('connected');
+    // Initialize speech recognition
+    if (recognitionSupported) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      recognitionRef.current = new SpeechRecognition();
+      
+      recognitionRef.current.continuous = false;
+      recognitionRef.current.interimResults = false;
+      recognitionRef.current.lang = 'en-US';
+
+      recognitionRef.current.onstart = () => {
+        setIsListening(true);
         setErrorMessage('');
-      });
+      };
 
-      socketConnection.on('user-joined', ({ userId, participantCount: count }) => {
-        console.log('👥 User joined:', userId, 'Total participants:', count);
-        setParticipantCount(count);
+      recognitionRef.current.onresult = (event) => {
+        const result = event.results[0][0].transcript;
+        setTranscript(result);
+        setIsListening(false);
+        handleUserSpeech(result);
+      };
 
-        // If we're the initiator and someone joined, create an offer
-        if (isInitiator && peerConnection) {
-          createOffer(userId);
-        }
-      });
-
-      socketConnection.on('user-left', ({ userId, participantCount: count }) => {
-        console.log('👋 User left:', userId, 'Remaining participants:', count);
-        setParticipantCount(count);
-
-        // Handle peer disconnection
-        if (remoteStream) {
-          setRemoteStream(null);
-          if (remoteAudioRef.current) {
-            remoteAudioRef.current.srcObject = null;
-          }
-        }
-      });
-
-      socketConnection.on('webrtc-offer', async ({ offer, fromId }) => {
-        console.log('📨 Received offer from:', fromId);
-        if (peerConnection) {
-          await handleOffer(offer, fromId);
-        }
-      });
-
-      socketConnection.on('webrtc-answer', async ({ answer, fromId }) => {
-        console.log('📨 Received answer from:', fromId);
-        if (peerConnection) {
-          await peerConnection.setRemoteDescription(answer);
-        }
-      });
-
-      socketConnection.on('webrtc-ice-candidate', async ({ candidate, fromId }) => {
-        console.log('🧊 Received ICE candidate from:', fromId);
-        if (peerConnection) {
-          await peerConnection.addIceCandidate(candidate);
-        }
-      });
-
-      socketConnection.on('connect_error', (error) => {
-        console.error('Socket connection error:', error);
-        setIsSignalingAvailable(false);
-        setErrorMessage('Voice calling is currently unavailable. This feature requires a WebRTC signaling server.');
-        setCallState('idle');
-      });
-
-      socketConnection.on('disconnect', (reason) => {
-        console.log('Socket disconnected:', reason);
-        if (reason === 'io server disconnect') {
-          setErrorMessage('Voice calling service is temporarily unavailable.');
-        }
-      });
-
-      // Set a timeout to check if connection is established
-      const connectionTimeout = setTimeout(() => {
-        if (!socketConnection.connected) {
-          setIsSignalingAvailable(false);
-          setErrorMessage('Voice calling is currently unavailable in this environment. The feature requires a signaling server.');
-          socketConnection.disconnect();
-        }
-      }, 5000);
-
-      // Cleanup on unmount
-      return () => {
-        clearTimeout(connectionTimeout);
-        if (localStream) {
-          localStream.getTracks().forEach(track => track.stop());
-        }
-        if (peerConnection) {
-          peerConnection.close();
-        }
-        if (socketConnection) {
-          socketConnection.disconnect();
+      recognitionRef.current.onerror = (event) => {
+        setIsListening(false);
+        if (event.error === 'not-allowed') {
+          setErrorMessage('Microphone access denied. Please allow microphone access and try again.');
+        } else if (event.error === 'no-speech') {
+          setErrorMessage('No speech detected. Please try again.');
+        } else {
+          setErrorMessage(`Speech recognition error: ${event.error}`);
         }
       };
-    } else {
-      // Cleanup for hosted environment (no socket connection)
-      return () => {
-        if (localStream) {
-          localStream.getTracks().forEach(track => track.stop());
-        }
-        if (peerConnection) {
-          peerConnection.close();
-        }
+
+      recognitionRef.current.onend = () => {
+        setIsListening(false);
       };
     }
-  }, []);
 
-  const initializePeerConnection = () => {
-    const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ]
-    });
-
-    pc.onicecandidate = (event) => {
-      if (event.candidate && socket) {
-        console.log('🧊 Sending ICE candidate');
-        socket.emit('webrtc-ice-candidate', {
-          roomId,
-          candidate: event.candidate,
-          targetId: null // Will be handled by server
-        });
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      if (speechSynthesisRef.current) {
+        window.speechSynthesis.cancel();
       }
     };
+  }, [recognitionSupported]);
 
-    pc.ontrack = (event) => {
-      console.log('🎵 Received remote stream');
-      setRemoteStream(event.streams[0]);
-      if (remoteAudioRef.current) {
-        remoteAudioRef.current.srcObject = event.streams[0];
-      }
-    };
+  const handleUserSpeech = async (userText) => {
+    // Add user message to conversation
+    const userMessage = { role: 'user', content: userText, timestamp: new Date() };
+    setConversationHistory(prev => [...prev, userMessage]);
 
-    pc.onconnectionstatechange = () => {
-      console.log('🔗 Connection state:', pc.connectionState);
-      if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-        setErrorMessage('Connection lost. Please try again.');
-      }
-    };
-
-    return pc;
-  };
-
-  const createOffer = async (targetId) => {
     try {
-      if (!peerConnection) return;
-      
-      const offer = await peerConnection.createOffer({
-        offerToReceiveAudio: true
+      // Send to backend for AI response
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: userText,
+          roomId: roomId,
+          conversationHistory: conversationHistory
+        }),
       });
-      await peerConnection.setLocalDescription(offer);
-      
-      console.log('📤 Sending offer to:', targetId);
-      socket.emit('webrtc-offer', {
-        roomId,
-        offer,
-        targetId
-      });
-    } catch (error) {
-      console.error('Error creating offer:', error);
-      setErrorMessage('Failed to create call offer.');
-    }
-  };
 
-  const handleOffer = async (offer, fromId) => {
-    try {
-      if (!peerConnection) return;
-      
-      await peerConnection.setRemoteDescription(offer);
-      
-      const answer = await peerConnection.createAnswer();
-      await peerConnection.setLocalDescription(answer);
-      
-      console.log('📤 Sending answer to:', fromId);
-      socket.emit('webrtc-answer', {
-        roomId,
-        answer,
-        targetId: fromId
-      });
-    } catch (error) {
-      console.error('Error handling offer:', error);
-      setErrorMessage('Failed to handle call offer.');
-    }
-  };
-
-  const startCall = async () => {
-    try {
-      setCallState('connecting');
-      setErrorMessage('');
-      
-      // Get user media (audio only)
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        }
-      });
-      setLocalStream(stream);
-      
-      if (localAudioRef.current) {
-        localAudioRef.current.srcObject = stream;
-        localAudioRef.current.muted = true; // Prevent echo
+      if (!response.ok) {
+        throw new Error('Failed to get AI response');
       }
 
-      // Initialize peer connection
-      const pc = initializePeerConnection();
-      setPeerConnection(pc);
-
-      // Add local stream to peer connection
-      stream.getTracks().forEach(track => {
-        pc.addTrack(track, stream);
-      });
-
-      // Join room via Socket.IO
-      const targetRoomId = roomId || generateRoomId();
-      setRoomId(targetRoomId);
+      const data = await response.json();
+      const aiText = data.responseText;
       
-      if (socket) {
-        socket.emit('join-room', { roomId: targetRoomId });
-      } else {
-        throw new Error('Socket connection not available');
+      // Add AI response to conversation
+      const aiMessage = { role: 'assistant', content: aiText, timestamp: new Date() };
+      setConversationHistory(prev => [...prev, aiMessage]);
+      setAiResponse(aiText);
+
+      // Speak the AI response
+      if (speechSupported) {
+        speakText(aiText);
       }
 
     } catch (error) {
-      console.error('Error starting call:', error);
-      setCallState('idle');
-      
-      if (error.name === 'NotAllowedError') {
-        setErrorMessage('Microphone access denied. Please allow microphone access and try again.');
-      } else if (error.name === 'NotFoundError') {
-        setErrorMessage('No microphone found. Please connect a microphone and try again.');
-      } else {
-        setErrorMessage('Failed to start call. Please check your microphone permissions.');
-      }
+      console.error('Error getting AI response:', error);
+      setErrorMessage('Failed to get AI response. Please try again.');
     }
   };
 
-  const joinCall = async () => {
-    if (!joinRoomId.trim()) {
-      setErrorMessage('Please enter a room ID to join.');
+  const speakText = (text) => {
+    if (!speechSupported) return;
+
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.9;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+    
+    utterance.onstart = () => {
+      setIsSpeaking(true);
+    };
+    
+    utterance.onend = () => {
+      setIsSpeaking(false);
+    };
+    
+    utterance.onerror = (event) => {
+      setIsSpeaking(false);
+      console.error('Speech synthesis error:', event.error);
+    };
+
+    speechSynthesisRef.current = utterance;
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const startListening = () => {
+    if (!recognitionSupported || !recognitionRef.current) {
+      setErrorMessage('Speech recognition is not available.');
       return;
     }
-    
-    setRoomId(joinRoomId.toUpperCase());
-    await startCall();
+
+    setTranscript('');
+    setErrorMessage('');
+    recognitionRef.current.start();
   };
 
-  const endCall = () => {
-    if (localStream) {
-      localStream.getTracks().forEach(track => track.stop());
+  const stopListening = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
     }
-    if (peerConnection) {
-      peerConnection.close();
-    }
-    if (socket && roomId) {
-      socket.emit('leave-room', { roomId });
-    }
-    
-    setLocalStream(null);
-    setRemoteStream(null);
-    setPeerConnection(null);
-    setCallState('ended');
-    setParticipantCount(0);
+    setIsListening(false);
+  };
+
+  const stopSpeaking = () => {
+    window.speechSynthesis.cancel();
+    setIsSpeaking(false);
+  };
+
+  const joinRoom = () => {
+    const targetRoomId = joinRoomId.trim() || generateRoomId();
+    setRoomId(targetRoomId);
+    setRoomState('joined');
+    setConversationHistory([]);
     setErrorMessage('');
     
-    setTimeout(() => setCallState('idle'), 2000);
+    // Add welcome message
+    const welcomeMessage = {
+      role: 'assistant',
+      content: `Welcome to AI Voice Chat Room ${targetRoomId}! I'm your AI assistant powered by Gemini. You can speak to me and I'll respond with voice. Click the microphone button to start talking.`,
+      timestamp: new Date()
+    };
+    setConversationHistory([welcomeMessage]);
+    
+    if (speechSupported) {
+      speakText(welcomeMessage.content);
+    }
+  };
+
+  const leaveRoom = () => {
+    setRoomState('idle');
+    setRoomId('');
+    setJoinRoomId('');
+    setConversationHistory([]);
+    setTranscript('');
+    setAiResponse('');
+    setErrorMessage('');
+    
+    // Stop any ongoing speech
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+    window.speechSynthesis.cancel();
+    setIsListening(false);
+    setIsSpeaking(false);
   };
 
   const generateRoomId = () => {
-    const id = Math.random().toString(36).substring(2, 8).toUpperCase();
-    setRoomId(id);
-    return id;
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
   };
 
   return (
     <div className="max-w-4xl mx-auto">
       <div className="bg-gray-800 rounded-lg shadow-lg p-8">
         <div className="text-center mb-8">
-          <h2 className="text-3xl font-bold text-white mb-2">Voice Call</h2>
-          <p className="text-gray-400">Secure peer-to-peer voice communication</p>
+          <h2 className="text-3xl font-bold text-white mb-2">AI Voice Chat Room</h2>
+          <p className="text-gray-400">Talk to Gemini AI using your voice</p>
         </div>
 
         {errorMessage && (
@@ -326,27 +224,26 @@ function CallingPage() {
           </div>
         )}
 
-        {!isSignalingAvailable && (
-          <div className="mb-6 p-4 bg-blue-900 border border-blue-700 rounded-lg">
-            <h4 className="text-blue-200 font-semibold mb-2">ℹ��� Voice Calling Information</h4>
-            <p className="text-blue-200 text-sm">
-              Voice calling requires a WebRTC signaling server. This feature works in local development
-              but may not be available in hosted environments without additional backend infrastructure.
+        {(!recognitionSupported || !speechSupported) && (
+          <div className="mb-6 p-4 bg-yellow-900 border border-yellow-700 rounded-lg">
+            <h4 className="text-yellow-200 font-semibold mb-2">⚠️ Browser Compatibility</h4>
+            <p className="text-yellow-200 text-sm">
+              For the best experience, please use a modern browser like Chrome or Edge that supports
+              Web Speech API for voice recognition and synthesis.
             </p>
           </div>
         )}
 
-        {callState === 'idle' && (
+        {roomState === 'idle' && (
           <div className="space-y-6">
             <div className="text-center">
-              <div className="text-6xl mb-4">📞</div>
-              <p className="text-gray-300 mb-6">Start a voice call or join an existing room</p>
+              <div className="text-6xl mb-4">🤖</div>
+              <p className="text-gray-300 mb-6">Join an AI voice chat room to start talking with Gemini</p>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-6">
-              {/* Start New Call */}
+            <div className="max-w-md mx-auto">
               <div className="bg-gray-700 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-white mb-4">Start New Call</h3>
+                <h3 className="text-lg font-semibold text-white mb-4 text-center">Enter Room</h3>
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -355,14 +252,14 @@ function CallingPage() {
                     <div className="flex space-x-2">
                       <input
                         type="text"
-                        value={roomId}
-                        onChange={(e) => setRoomId(e.target.value.toUpperCase())}
-                        placeholder="Enter room ID"
+                        value={joinRoomId}
+                        onChange={(e) => setJoomRoomId(e.target.value.toUpperCase())}
+                        placeholder="Enter room ID or leave blank"
                         className="flex-1 bg-gray-600 border border-gray-500 rounded-md px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         maxLength="6"
                       />
                       <button
-                        onClick={generateRoomId}
+                        onClick={() => setJoinRoomId(generateRoomId())}
                         className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors text-sm"
                       >
                         Generate
@@ -370,46 +267,10 @@ function CallingPage() {
                     </div>
                   </div>
                   <button
-                    onClick={startCall}
-                    disabled={!isSignalingAvailable}
-                    className={`w-full py-3 text-white rounded-md transition-colors font-medium ${
-                      isSignalingAvailable
-                        ? 'bg-green-600 hover:bg-green-700'
-                        : 'bg-gray-600 cursor-not-allowed opacity-50'
-                    }`}
+                    onClick={joinRoom}
+                    className="w-full py-3 bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors font-medium"
                   >
-                    {isSignalingAvailable ? 'Start Call' : 'Service Unavailable'}
-                  </button>
-                </div>
-              </div>
-
-              {/* Join Existing Call */}
-              <div className="bg-gray-700 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-white mb-4">Join Existing Call</h3>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Room ID
-                    </label>
-                    <input
-                      type="text"
-                      value={joinRoomId}
-                      onChange={(e) => setJoinRoomId(e.target.value.toUpperCase())}
-                      placeholder="Enter room ID to join"
-                      className="w-full bg-gray-600 border border-gray-500 rounded-md px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      maxLength="6"
-                    />
-                  </div>
-                  <button
-                    onClick={joinCall}
-                    disabled={!isSignalingAvailable}
-                    className={`w-full py-3 text-white rounded-md transition-colors font-medium ${
-                      isSignalingAvailable
-                        ? 'bg-blue-600 hover:bg-blue-700'
-                        : 'bg-gray-600 cursor-not-allowed opacity-50'
-                    }`}
-                  >
-                    {isSignalingAvailable ? 'Join Call' : 'Service Unavailable'}
+                    Join AI Chat Room
                   </button>
                 </div>
               </div>
@@ -417,73 +278,124 @@ function CallingPage() {
           </div>
         )}
 
-        {callState === 'connecting' && (
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500 mx-auto mb-4"></div>
-            <h3 className="text-xl font-semibold text-white mb-2">Connecting...</h3>
-            <p className="text-gray-400">Setting up your voice connection</p>
-            {roomId && (
-              <div className="mt-4 p-3 bg-gray-700 rounded-lg inline-block">
+        {roomState === 'joined' && (
+          <div className="space-y-6">
+            {/* Room Header */}
+            <div className="text-center">
+              <div className="text-4xl mb-2">🤖💬</div>
+              <h3 className="text-xl font-semibold text-white mb-2">AI Chat Room</h3>
+              <div className="inline-block px-4 py-2 bg-gray-700 rounded-lg">
                 <span className="text-gray-300">Room ID: </span>
                 <span className="font-mono text-blue-400 text-lg">{roomId}</span>
               </div>
-            )}
-          </div>
-        )}
+            </div>
 
-        {callState === 'connected' && (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4 animate-pulse">🎙️</div>
-            <h3 className="text-xl font-semibold text-green-400 mb-2">Call Active</h3>
-            <p className="text-gray-400 mb-4">
-              {participantCount === 1 ? 'Waiting for others to join...' : `${participantCount} participants connected`}
-            </p>
-            
-            {roomId && (
-              <div className="mb-6 p-4 bg-gray-700 rounded-lg inline-block">
-                <div className="text-gray-300 mb-2">Share this Room ID:</div>
-                <div className="font-mono text-blue-400 text-2xl font-bold">{roomId}</div>
-                <div className="text-sm text-gray-400 mt-2">Others can join using this ID</div>
+            {/* Voice Controls */}
+            <div className="flex justify-center space-x-4">
+              <button
+                onClick={isListening ? stopListening : startListening}
+                disabled={!recognitionSupported}
+                className={`px-6 py-3 rounded-full text-white font-medium transition-all duration-200 ${
+                  isListening
+                    ? 'bg-red-600 hover:bg-red-700 animate-pulse'
+                    : 'bg-blue-600 hover:bg-blue-700'
+                } ${!recognitionSupported ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                <div className="flex items-center space-x-2">
+                  <span className="text-xl">🎤</span>
+                  <span>{isListening ? 'Stop Listening' : 'Start Talking'}</span>
+                </div>
+              </button>
+
+              {isSpeaking && (
+                <button
+                  onClick={stopSpeaking}
+                  className="px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-full font-medium transition-colors"
+                >
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xl">🔇</span>
+                    <span>Stop AI Speaking</span>
+                  </div>
+                </button>
+              )}
+
+              <button
+                onClick={leaveRoom}
+                className="px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-full font-medium transition-colors"
+              >
+                Leave Room
+              </button>
+            </div>
+
+            {/* Status Indicators */}
+            <div className="flex justify-center space-x-6 text-sm">
+              <div className={`flex items-center space-x-2 ${isListening ? 'text-red-400' : 'text-gray-500'}`}>
+                <div className={`w-2 h-2 rounded-full ${isListening ? 'bg-red-400 animate-pulse' : 'bg-gray-500'}`}></div>
+                <span>Listening</span>
+              </div>
+              <div className={`flex items-center space-x-2 ${isSpeaking ? 'text-blue-400' : 'text-gray-500'}`}>
+                <div className={`w-2 h-2 rounded-full ${isSpeaking ? 'bg-blue-400 animate-pulse' : 'bg-gray-500'}`}></div>
+                <span>AI Speaking</span>
+              </div>
+            </div>
+
+            {/* Current Transcript */}
+            {transcript && (
+              <div className="bg-gray-700 rounded-lg p-4">
+                <h4 className="text-sm font-medium text-gray-300 mb-2">You said:</h4>
+                <p className="text-white">{transcript}</p>
               </div>
             )}
-            
-            <div className="space-y-4">
-              <div className="flex justify-center space-x-4 text-sm text-gray-400">
-                <div>🎤 Microphone: Active</div>
-                {remoteStream && <div>🔊 Remote Audio: Connected</div>}
+
+            {/* Conversation History */}
+            <div className="bg-gray-700 rounded-lg p-4 max-h-96 overflow-y-auto">
+              <h4 className="text-sm font-medium text-gray-300 mb-4">Conversation</h4>
+              <div className="space-y-3">
+                {conversationHistory.map((message, index) => (
+                  <div
+                    key={index}
+                    className={`p-3 rounded-lg ${
+                      message.role === 'user'
+                        ? 'bg-blue-600 ml-8'
+                        : 'bg-green-600 mr-8'
+                    }`}
+                  >
+                    <div className="flex items-start space-x-2">
+                      <span className="text-lg">
+                        {message.role === 'user' ? '👤' : '🤖'}
+                      </span>
+                      <div className="flex-1">
+                        <p className="text-white text-sm">{message.content}</p>
+                        <p className="text-gray-300 text-xs mt-1">
+                          {message.timestamp.toLocaleTimeString()}
+                        </p>
+                      </div>
+                      {message.role === 'assistant' && (
+                        <button
+                          onClick={() => speakText(message.content)}
+                          className="text-gray-300 hover:text-white transition-colors"
+                          title="Replay this message"
+                        >
+                          🔊
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
-              
-              <button
-                onClick={endCall}
-                className="px-8 py-3 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors font-medium"
-              >
-                End Call
-              </button>
             </div>
           </div>
         )}
-
-        {callState === 'ended' && (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">📴</div>
-            <h3 className="text-xl font-semibold text-gray-400 mb-2">Call Ended</h3>
-            <p className="text-gray-500">The call has been disconnected</p>
-          </div>
-        )}
-
-        {/* Hidden audio elements */}
-        <audio ref={localAudioRef} autoPlay muted />
-        <audio ref={remoteAudioRef} autoPlay />
 
         {/* Technical Info */}
         <div className="mt-8 p-4 bg-gray-700 rounded-lg">
           <h4 className="text-sm font-medium text-gray-300 mb-2">Technical Information</h4>
           <div className="text-xs text-gray-500 space-y-1">
-            <p>• Uses WebRTC for peer-to-peer communication</p>
-            <p>• Audio-only calls with automatic echo cancellation</p>
-            <p>• STUN servers: stun.l.google.com:19302</p>
-            <p>• Signaling server: Socket.IO on port 5001</p>
-            <p>• Room-based connections with automatic cleanup</p>
+            <p>• Uses Web Speech API for voice recognition and synthesis</p>
+            <p>• AI responses powered by Gemini API</p>
+            <p>• Supports English language voice interaction</p>
+            <p>• Real-time speech-to-text and text-to-speech conversion</p>
+            <p>• Room-based conversation context and history</p>
           </div>
         </div>
       </div>
