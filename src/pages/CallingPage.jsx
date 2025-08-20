@@ -39,95 +39,108 @@ function CallingPage() {
     });
     setSocket(socketConnection);
 
-    // Socket event listeners
-    socketConnection.on('room-joined', ({ roomId: joinedRoomId, participantCount: count, isInitiator: initiator }) => {
-      console.log('✅ Joined room:', joinedRoomId, 'Participants:', count, 'Initiator:', initiator);
-      setParticipantCount(count);
-      setIsInitiator(initiator);
-      setCallState('connected');
-      setErrorMessage('');
-    });
+    // Only set up socket event listeners in local development
+    if (isLocalDevelopment) {
+      // Socket event listeners
+      socketConnection.on('room-joined', ({ roomId: joinedRoomId, participantCount: count, isInitiator: initiator }) => {
+        console.log('✅ Joined room:', joinedRoomId, 'Participants:', count, 'Initiator:', initiator);
+        setParticipantCount(count);
+        setIsInitiator(initiator);
+        setCallState('connected');
+        setErrorMessage('');
+      });
 
-    socketConnection.on('user-joined', ({ userId, participantCount: count }) => {
-      console.log('👥 User joined:', userId, 'Total participants:', count);
-      setParticipantCount(count);
-      
-      // If we're the initiator and someone joined, create an offer
-      if (isInitiator && peerConnection) {
-        createOffer(userId);
-      }
-    });
+      socketConnection.on('user-joined', ({ userId, participantCount: count }) => {
+        console.log('👥 User joined:', userId, 'Total participants:', count);
+        setParticipantCount(count);
 
-    socketConnection.on('user-left', ({ userId, participantCount: count }) => {
-      console.log('👋 User left:', userId, 'Remaining participants:', count);
-      setParticipantCount(count);
-      
-      // Handle peer disconnection
-      if (remoteStream) {
-        setRemoteStream(null);
-        if (remoteAudioRef.current) {
-          remoteAudioRef.current.srcObject = null;
+        // If we're the initiator and someone joined, create an offer
+        if (isInitiator && peerConnection) {
+          createOffer(userId);
         }
-      }
-    });
+      });
 
-    socketConnection.on('webrtc-offer', async ({ offer, fromId }) => {
-      console.log('📨 Received offer from:', fromId);
-      if (peerConnection) {
-        await handleOffer(offer, fromId);
-      }
-    });
+      socketConnection.on('user-left', ({ userId, participantCount: count }) => {
+        console.log('👋 User left:', userId, 'Remaining participants:', count);
+        setParticipantCount(count);
 
-    socketConnection.on('webrtc-answer', async ({ answer, fromId }) => {
-      console.log('📨 Received answer from:', fromId);
-      if (peerConnection) {
-        await peerConnection.setRemoteDescription(answer);
-      }
-    });
+        // Handle peer disconnection
+        if (remoteStream) {
+          setRemoteStream(null);
+          if (remoteAudioRef.current) {
+            remoteAudioRef.current.srcObject = null;
+          }
+        }
+      });
 
-    socketConnection.on('webrtc-ice-candidate', async ({ candidate, fromId }) => {
-      console.log('🧊 Received ICE candidate from:', fromId);
-      if (peerConnection) {
-        await peerConnection.addIceCandidate(candidate);
-      }
-    });
+      socketConnection.on('webrtc-offer', async ({ offer, fromId }) => {
+        console.log('📨 Received offer from:', fromId);
+        if (peerConnection) {
+          await handleOffer(offer, fromId);
+        }
+      });
 
-    socketConnection.on('connect_error', (error) => {
-      console.error('Socket connection error:', error);
-      setIsSignalingAvailable(false);
-      setErrorMessage('Voice calling is currently unavailable. This feature requires a WebRTC signaling server.');
-      setCallState('idle');
-    });
+      socketConnection.on('webrtc-answer', async ({ answer, fromId }) => {
+        console.log('📨 Received answer from:', fromId);
+        if (peerConnection) {
+          await peerConnection.setRemoteDescription(answer);
+        }
+      });
 
-    socketConnection.on('disconnect', (reason) => {
-      console.log('Socket disconnected:', reason);
-      if (reason === 'io server disconnect') {
-        setErrorMessage('Voice calling service is temporarily unavailable.');
-      }
-    });
+      socketConnection.on('webrtc-ice-candidate', async ({ candidate, fromId }) => {
+        console.log('🧊 Received ICE candidate from:', fromId);
+        if (peerConnection) {
+          await peerConnection.addIceCandidate(candidate);
+        }
+      });
 
-    // Set a timeout to check if connection is established
-    const connectionTimeout = setTimeout(() => {
-      if (!socketConnection.connected) {
+      socketConnection.on('connect_error', (error) => {
+        console.error('Socket connection error:', error);
         setIsSignalingAvailable(false);
-        setErrorMessage('Voice calling is currently unavailable in this environment. The feature requires a signaling server.');
-        socketConnection.disconnect();
-      }
-    }, 5000);
+        setErrorMessage('Voice calling is currently unavailable. This feature requires a WebRTC signaling server.');
+        setCallState('idle');
+      });
 
-    // Cleanup on unmount
-    return () => {
-      clearTimeout(connectionTimeout);
-      if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
-      }
-      if (peerConnection) {
-        peerConnection.close();
-      }
-      if (socketConnection) {
-        socketConnection.disconnect();
-      }
-    };
+      socketConnection.on('disconnect', (reason) => {
+        console.log('Socket disconnected:', reason);
+        if (reason === 'io server disconnect') {
+          setErrorMessage('Voice calling service is temporarily unavailable.');
+        }
+      });
+
+      // Set a timeout to check if connection is established
+      const connectionTimeout = setTimeout(() => {
+        if (!socketConnection.connected) {
+          setIsSignalingAvailable(false);
+          setErrorMessage('Voice calling is currently unavailable in this environment. The feature requires a signaling server.');
+          socketConnection.disconnect();
+        }
+      }, 5000);
+
+      // Cleanup on unmount
+      return () => {
+        clearTimeout(connectionTimeout);
+        if (localStream) {
+          localStream.getTracks().forEach(track => track.stop());
+        }
+        if (peerConnection) {
+          peerConnection.close();
+        }
+        if (socketConnection) {
+          socketConnection.disconnect();
+        }
+      };
+    } else {
+      // Cleanup for hosted environment (no socket connection)
+      return () => {
+        if (localStream) {
+          localStream.getTracks().forEach(track => track.stop());
+        }
+        if (peerConnection) {
+          peerConnection.close();
+        }
+      };
+    }
   }, []);
 
   const initializePeerConnection = () => {
@@ -315,7 +328,7 @@ function CallingPage() {
 
         {!isSignalingAvailable && (
           <div className="mb-6 p-4 bg-blue-900 border border-blue-700 rounded-lg">
-            <h4 className="text-blue-200 font-semibold mb-2">ℹ️ Voice Calling Information</h4>
+            <h4 className="text-blue-200 font-semibold mb-2">ℹ��� Voice Calling Information</h4>
             <p className="text-blue-200 text-sm">
               Voice calling requires a WebRTC signaling server. This feature works in local development
               but may not be available in hosted environments without additional backend infrastructure.
