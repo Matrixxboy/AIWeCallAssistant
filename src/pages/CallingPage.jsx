@@ -312,6 +312,16 @@ function CallingPage() {
           </div>
         )}
 
+        {!isSignalingAvailable && (
+          <div className="mb-6 p-4 bg-blue-900 border border-blue-700 rounded-lg">
+            <h4 className="text-blue-200 font-semibold mb-2">ℹ️ Voice Calling Information</h4>
+            <p className="text-blue-200 text-sm">
+              Voice calling requires a WebRTC signaling server. This feature works in local development
+              but may not be available in hosted environments without additional backend infrastructure.
+            </p>
+          </div>
+        )}
+
         {callState === 'idle' && (
           <div className="space-y-6">
             <div className="text-center">
