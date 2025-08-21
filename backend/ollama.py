@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import os
 import time
-from gtts import gTTS
+import pyttsx3  # Import the new TTS library
 import requests
 from dotenv import load_dotenv
 
@@ -12,9 +12,7 @@ app = Flask(__name__)
 CORS(app)
 
 # --- Ollama Configuration ---
-# Using the modern /api/chat endpoint. Ensure your Ollama is up to date.
 OLLAMA_API_URL = "http://localhost:11434/api/chat"
-# Using the specific model confirmed to be on your system.
 OLLAMA_MODEL = "guru-english:latest"
 
 # Create static directory for audio files
@@ -32,11 +30,9 @@ def get_ollama_response(text, conversation_history=None):
             role = 'assistant' if msg['role'] == 'assistant' else 'user'
             messages.append({'role': role, 'content': msg['content']})
     
-    # Add the current user's message
     messages.append({'role': 'user', 'content': text})
 
     try:
-        # Payload for the /api/chat endpoint
         payload = {
             "model": OLLAMA_MODEL,
             "messages": messages,
@@ -69,16 +65,31 @@ def chat():
 
         ai_response = get_ollama_response(user_text, conversation_history)
         
-        tts = gTTS(text=ai_response, lang='en', slow=False)
-        
-        timestamp = int(time.time() * 1000)
-        filename = f"response_{timestamp}.mp3"
-        filepath = os.path.join(STATIC_DIR, filename)
-        
-        tts.save(filepath)
-        
-        audio_url = f"http://localhost:5000/static/audio/{filename}"
-        
+        audio_url = None
+
+        # --- Gracefully handle TTS generation with pyttsx3 ---
+        try:
+            engine = pyttsx3.init()
+            
+            # Optional: You can configure voice, rate, volume here
+            voices = engine.getProperty('voices')
+            engine.setProperty('voice', voices[1].id) # Change voice
+            engine.setProperty('rate', 150) # Speed percent
+
+            timestamp = int(time.time() * 1000)
+            filename = f"response_{timestamp}.mp3"
+            filepath = os.path.join(STATIC_DIR, filename)
+            
+            # Save the speech to a file
+            engine.save_to_file(ai_response, filepath)
+            engine.runAndWait() # Blocks until saving is complete
+
+            audio_url = f"{request.host_url}static/audio/{filename}"
+
+        except Exception as e:
+            # Catch any errors during local TTS generation
+            print(f"An unexpected error occurred during pyttsx3 TTS generation: {e}")
+
         return jsonify({
             'responseText': ai_response,
             'audioUrl': audio_url

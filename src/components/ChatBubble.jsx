@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 
 function ChatBubble({ message }) {
   const [isPlaying, setIsPlaying] = useState(false);
-  const isUser = message.sender === 'user';
+  const isUser = message.role === 'user';
 
   const playAudio = async () => {
     if (!message.audioUrl) return;
