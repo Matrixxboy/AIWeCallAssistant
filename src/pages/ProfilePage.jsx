@@ -130,10 +130,10 @@ function ProfilePage() {
   ];
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6 px-2 sm:px-0">
       {/* Profile Header */}
       <Card className="glass-dark border-white/20 glow-blue">
-        <CardContent className="p-8">
+        <CardContent className="p-4 sm:p-8">
           <div className="flex flex-col md:flex-row items-center md:items-start space-y-4 md:space-y-0 md:space-x-6">
             <Avatar
               src={user?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.username || 'default'}`}
@@ -235,7 +235,7 @@ function ProfilePage() {
       </Card>
 
       {/* Tab Navigation */}
-      <div className="flex space-x-2 overflow-x-auto">
+      <div className="flex space-x-1 sm:space-x-2 overflow-x-auto pb-2 px-2 sm:px-0 scrollbar-hide">
         {tabs.map((tab) => (
           <Button
             key={tab.id}
@@ -257,7 +257,7 @@ function ProfilePage() {
 
       {/* Tab Content */}
       {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           <Card className="glass-dark border-white/20">
             <CardHeader>
               <h3 className="text-lg font-semibold text-white">Activity Summary</h3>

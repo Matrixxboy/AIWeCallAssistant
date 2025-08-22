@@ -236,3 +236,36 @@
 ::selection {
   @apply bg-blue-500/30 text-white;
 }
+
+/* Hide scrollbar utility */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Mobile responsive text sizes */
+@media (max-width: 640px) {
+  .text-responsive-xl {
+    @apply text-xl;
+  }
+
+  .text-responsive-2xl {
+    @apply text-2xl;
+  }
+
+  .text-responsive-3xl {
+    @apply text-3xl;
+  }
+}
+
+/* Safe area for mobile devices */
+@supports (padding: max(0px)) {
+  .safe-area-inset {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+}

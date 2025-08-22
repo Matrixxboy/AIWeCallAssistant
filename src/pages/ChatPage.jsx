@@ -194,22 +194,22 @@ function ChatPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
       {/* Welcome Header */}
-      <div className="text-center space-y-4">
-        <div className="text-6xl animate-bounce">🤖</div>
+      <div className="text-center space-y-3 sm:space-y-4 px-2">
+        <div className="text-4xl sm:text-6xl animate-bounce">🤖</div>
         <div>
-          <h1 className="text-4xl font-bold text-gradient mb-2">
+          <h1 className="text-2xl sm:text-4xl font-bold text-gradient mb-2">
             Welcome back, {user?.username || 'User'}!
           </h1>
-          <p className="text-gray-400 text-lg">
+          <p className="text-gray-400 text-sm sm:text-lg px-4">
             Your AI assistant is ready for voice and text conversations
           </p>
         </div>
       </div>
 
       {/* Stats Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <Card className="glass-dark border-white/20 glow-blue">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -264,7 +264,7 @@ function ChatPage() {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {quickActions.map((action, index) => (
           <Card key={index} className="glass-dark border-white/20 hover:scale-105 transition-all duration-300 cursor-pointer" onClick={action.action}>
             <CardContent className="p-6">
@@ -284,7 +284,7 @@ function ChatPage() {
       </div>
 
       {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Activity Chart */}
         <Card className="glass-dark border-white/20">
           <CardHeader>
