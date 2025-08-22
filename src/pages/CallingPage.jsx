@@ -346,8 +346,8 @@ function CallingPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="bg-gray-800 rounded-lg shadow-lg p-8">
+    <div className="max-w-4xl mx-auto px-2 sm:px-0">
+      <div className="bg-gray-800 rounded-lg shadow-lg p-4 sm:p-8">
         <div className="text-center mb-8">
           <h2 className="text-3xl font-bold text-white mb-2">AI Voice Chat Room</h2>
           <p className="text-gray-400">Talk to Gemini AI using your voice</p>
@@ -488,11 +488,11 @@ function CallingPage() {
             </div>
 
             {/* Voice Controls */}
-            <div className="flex justify-center space-x-4 flex-wrap">
+            <div className="flex justify-center space-x-2 sm:space-x-4 flex-wrap gap-2">
               <button
                 onClick={isListening ? stopListening : startListening}
                 disabled={!recognitionSupported}
-                className={`px-6 py-3 rounded-full text-white font-medium transition-all duration-200 ${
+                className={`px-4 sm:px-6 py-2 sm:py-3 rounded-full text-white font-medium transition-all duration-200 text-sm sm:text-base ${
                   isListening
                     ? 'bg-red-600 hover:bg-red-700 animate-pulse'
                     : 'bg-blue-600 hover:bg-blue-700'

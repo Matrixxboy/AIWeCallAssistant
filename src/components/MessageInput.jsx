@@ -241,13 +241,13 @@ function MessageInput({ onSendMessage, disabled }) {
   };
 
   return (
-    <div className="border-t border-gray-700 p-4">
-      <div className="flex items-end space-x-3">
+    <div className="border-t border-gray-700 p-3 sm:p-4">
+      <div className="flex items-end space-x-2 sm:space-x-3">
         {/* Voice Input Button */}
         <button
           onClick={toggleRecording}
           disabled={disabled || !speechRecognitionSupported || microphonePermission === 'denied'}
-          className={`p-3 rounded-full transition-all duration-200 flex-shrink-0 ${getMicrophoneButtonStyle()}`}
+          className={`p-2 sm:p-3 rounded-full transition-all duration-200 flex-shrink-0 ${getMicrophoneButtonStyle()}`}
           title={getMicrophoneButtonTitle()}
         >
           {isRecording ? (
