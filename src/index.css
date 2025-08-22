@@ -47,25 +47,65 @@
     --input: 217.2 32.6% 17.5%;
     --ring: 224.3 76.3% 94.1%;
   }
+
+  .light {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 84% 4.9%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 84% 4.9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+  }
 }
 
 @layer base {
   * {
     @apply border-border;
+    transition: var(--theme-transition, none);
   }
   body {
     @apply bg-background text-foreground;
+    transition: var(--theme-transition, none);
   }
 }
 
 @layer components {
   /* Glassmorphism effects */
   .glass {
-    @apply backdrop-blur-md bg-white/10 border border-white/20 shadow-lg;
+    @apply backdrop-blur-md border shadow-lg transition-all duration-300;
   }
-  
+
+  .dark .glass {
+    @apply bg-white/10 border-white/20;
+  }
+
+  .light .glass {
+    @apply bg-white/70 border-gray-200/50;
+  }
+
   .glass-dark {
-    @apply backdrop-blur-md bg-black/20 border border-white/10 shadow-lg;
+    @apply backdrop-blur-md border shadow-lg transition-all duration-300;
+  }
+
+  .dark .glass-dark {
+    @apply bg-black/20 border-white/10;
+  }
+
+  .light .glass-dark {
+    @apply bg-white/90 border-gray-300/30;
   }
 
   /* Back-glow effects */
