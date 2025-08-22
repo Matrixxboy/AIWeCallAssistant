@@ -1,262 +1,231 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import 'webrtc-adapter';
 
 function MessageInput({ onSendMessage, disabled }) {
   const [message, setMessage] = useState('');
   const [isRecording, setIsRecording] = useState(false);
-  const [recognition, setRecognition] = useState(null);
-  const [recordingTimeout, setRecordingTimeout] = useState(null);
-  const [microphonePermission, setMicrophonePermission] = useState('prompt');
-  const [speechRecognitionSupported, setSpeechRecognitionSupported] = useState(false);
+  const [notification, setNotification] = useState({ message: '', type: '' });
+  const [speechSupported, setSpeechSupported] = useState(false);
+  const [micPermission, setMicPermission] = useState('prompt'); // 'granted' | 'denied' | 'prompt'
+  
+  const recognitionRef = useRef(null);
+  const recordingTimeoutRef = useRef(null);
   const inputRef = useRef(null);
 
+  const showNotification = (msg, type = 'info', duration = 4000) => {
+    setNotification({ message: msg, type });
+    if (duration > 0) {
+      setTimeout(() => setNotification({ message: '', type: '' }), duration);
+    }
+  };
+
+  const handleSend = useCallback((textToSend) => {
+    if (textToSend && textToSend.trim() && !disabled) {
+      onSendMessage(textToSend.trim());
+      setMessage('');
+    }
+  }, [onSendMessage, disabled]);
+
+  // Detect support and init speech recognition
   useEffect(() => {
-    // Check browser support
-    const isSupported = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
-    setSpeechRecognitionSupported(isSupported);
-    
-    if (!isSupported) {
-      console.warn('Speech recognition not supported in this browser');
+    const supported = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
+    setSpeechSupported(supported);
+
+    if (!supported) {
+      console.warn('Speech recognition is not supported in this browser.');
       return;
     }
 
-    // Check microphone permissions
-    navigator.permissions.query({ name: 'microphone' }).then((result) => {
-      setMicrophonePermission(result.state);
-      console.log('Microphone permission:', result.state);
-      
-      result.onchange = () => {
-        setMicrophonePermission(result.state);
-        console.log('Microphone permission changed to:', result.state);
-      };
-    }).catch((error) => {
-      console.warn('Permission query not supported:', error);
-    });
-
-    // Initialize Speech Recognition
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const recognitionInstance = new SpeechRecognition();
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
 
-    recognitionInstance.continuous = false;
-    recognitionInstance.interimResults = true;
-    recognitionInstance.lang = 'en-US';
-    recognitionInstance.maxAlternatives = 1;
-
-    recognitionInstance.onstart = () => {
-      console.log('🎤 Speech recognition started');
+    recognition.onstart = () => {
       setIsRecording(true);
+      showNotification('Listening...', 'info', 0);
     };
 
-    recognitionInstance.onresult = (event) => {
-      console.log('🎯 Speech recognition result:', event);
+    recognition.onresult = (event) => {
       let finalTranscript = '';
       let interimTranscript = '';
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        const confidence = event.results[i][0].confidence;
-        
-        console.log(`Result ${i}: "${transcript}" (confidence: ${confidence}, final: ${event.results[i].isFinal})`);
-        
-        if (event.results[i].isFinal) {
-          finalTranscript += transcript;
+        const res = event.results[i];
+        if (res.isFinal) {
+          finalTranscript += res[0].transcript;
         } else {
-          interimTranscript += transcript;
+          interimTranscript += res[0].transcript;
         }
       }
 
       if (finalTranscript) {
-        console.log('✅ Final transcript:', finalTranscript);
         setMessage(finalTranscript);
-        handleSend(finalTranscript);
+        handleSend(finalTranscript); // auto-send final transcript
       } else if (interimTranscript) {
-        console.log('⏳ Interim transcript:', interimTranscript);
         setMessage(interimTranscript);
       }
     };
 
-    recognitionInstance.onend = () => {
-      console.log('🔇 Speech recognition ended');
+    recognition.onend = () => {
       setIsRecording(false);
-      if (recordingTimeout) {
-        clearTimeout(recordingTimeout);
-        setRecordingTimeout(null);
+      setNotification({ message: '', type: '' });
+      if (recordingTimeoutRef.current) {
+        clearTimeout(recordingTimeoutRef.current);
+        recordingTimeoutRef.current = null;
       }
     };
 
-    recognitionInstance.onerror = (event) => {
-      console.error('❌ Speech recognition error:', event.error, event);
-      setIsRecording(false);
-      if (recordingTimeout) {
-        clearTimeout(recordingTimeout);
-        setRecordingTimeout(null);
+    recognition.onerror = (event) => {
+      console.error('Speech recognition error:', event.error);
+      let errorMessage = 'An error occurred during speech recognition.';
+      if (event.error === 'no-speech') {
+        errorMessage = 'No speech detected. Please try again.';
+      } else if (event.error === 'not-allowed' || event.error === 'audio-capture') {
+        errorMessage = 'Microphone access denied. Please grant permission in your browser settings.';
+      } else if (event.error === 'network') {
+        errorMessage = 'Network error during recognition.';
       }
-
-      let errorMessage = 'Speech recognition error: ';
-      switch (event.error) {
-        case 'no-speech':
-          errorMessage += 'No speech detected. Please try speaking closer to the microphone.';
-          break;
-        case 'audio-capture':
-          errorMessage += 'Microphone access denied. Please check your microphone permissions.';
-          break;
-        case 'not-allowed':
-          errorMessage += 'Microphone access not allowed. Please grant microphone permissions in your browser settings.';
-          break;
-        case 'network':
-          errorMessage += 'Network error occurred during speech recognition. Speech recognition requires an internet connection.';
-          break;
-        case 'service-not-allowed':
-          errorMessage += 'Speech recognition service not allowed. This feature may require HTTPS.';
-          break;
-        case 'bad-grammar':
-          errorMessage += 'Grammar compilation error.';
-          break;
-        case 'language-not-supported':
-          errorMessage += 'Language not supported.';
-          break;
-        default:
-          errorMessage += event.error;
-      }
-
-      alert(errorMessage);
+      showNotification(errorMessage, 'error');
     };
 
-    recognitionInstance.onnomatch = () => {
-      console.log('❓ No speech match found');
-      setIsRecording(false);
-      if (recordingTimeout) {
-        clearTimeout(recordingTimeout);
-        setRecordingTimeout(null);
-      }
-      alert('No speech was recognized. Please try speaking more clearly.');
-    };
+    recognitionRef.current = recognition;
 
-    setRecognition(recognitionInstance);
-
-    // Cleanup on unmount
     return () => {
-      if (recordingTimeout) {
-        clearTimeout(recordingTimeout);
+      // cleanup on unmount
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch {}
       }
+      if (recordingTimeoutRef.current) {
+        clearTimeout(recordingTimeoutRef.current);
+      }
+    };
+  }, [handleSend]);
+
+  // Try to observe mic permission if Permissions API exists
+  useEffect(() => {
+    let permObj;
+    if (navigator.permissions?.query) {
+      navigator.permissions.query({ name: 'microphone' })
+        .then((res) => {
+          setMicPermission(res.state);
+          permObj = res;
+          res.onchange = () => setMicPermission(res.state);
+        })
+        .catch(() => {
+          // Some browsers don’t support querying mic; ignore
+        });
+    }
+    return () => {
+      if (permObj) permObj.onchange = null;
     };
   }, []);
 
-  const handleSend = (textToSend = message) => {
-    if (textToSend.trim() && !disabled) {
-      onSendMessage(textToSend.trim());
-      setMessage('');
-    }
-  };
-
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
   const toggleRecording = async () => {
-    console.log('🎯 Toggle recording clicked');
-    console.log('Speech recognition supported:', speechRecognitionSupported);
-    console.log('Microphone permission:', microphonePermission);
-    console.log('Recognition instance:', recognition);
-    console.log('Currently recording:', isRecording);
+    const recognition = recognitionRef.current;
 
-    if (!speechRecognitionSupported) {
-      alert('Speech recognition is not supported in your browser. Please use Chrome, Edge, or Safari.');
-      return;
-    }
-
-    if (!recognition) {
-      alert('Speech recognition is not initialized');
+    if (!speechSupported || !recognition) {
+      showNotification('Speech recognition is not supported in your browser.', 'warn');
       return;
     }
 
     if (isRecording) {
-      console.log('🛑 Stopping recording');
       recognition.stop();
-      if (recordingTimeout) {
-        clearTimeout(recordingTimeout);
-        setRecordingTimeout(null);
+      return;
+    }
+
+    try {
+      // Request mic access first (fixes Safari/Firefox quirks)
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      setMessage(''); // Clear input before starting
+      recognition.start();
+
+      // Safety timeout (30s)
+      recordingTimeoutRef.current = setTimeout(() => {
+        showNotification('Recording timed out after 30 seconds.', 'warn');
+        try { recognition.stop(); } catch {}
+      }, 30000);
+    } catch (error) {
+      console.error('Microphone access error:', error);
+      let msg = 'Unable to access microphone. ';
+      if (error.name === 'NotAllowedError' || error.name === 'SecurityError') {
+        msg += 'Please grant microphone permissions and reload.';
+      } else if (error.name === 'NotFoundError' || error.name === 'OverconstrainedError') {
+        msg += 'No suitable microphone found.';
+      } else if (error.name === 'NotSupportedError') {
+        msg += 'Your browser may require HTTPS for mic access.';
+      } else {
+        msg += 'Please check your browser permissions.';
       }
-    } else {
-      try {
-        console.log('🎤 Starting recording - requesting microphone access');
-        
-        // Request microphone permissions first
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        console.log('✅ Microphone access granted');
-        
-        // Stop the stream immediately as we only needed it for permission
-        stream.getTracks().forEach(track => track.stop());
-
-        console.log('🚀 Starting speech recognition');
-        setIsRecording(true);
-        recognition.start();
-
-        // Set a timeout to stop recording after 30 seconds
-        const timeout = setTimeout(() => {
-          console.log('⏰ Recording timeout reached');
-          if (recognition && isRecording) {
-            recognition.stop();
-            alert('Recording stopped due to timeout. Please try again.');
-          }
-        }, 30000);
-
-        setRecordingTimeout(timeout);
-
-      } catch (error) {
-        console.error('❌ Microphone access error:', error);
-        
-        let errorMessage = 'Unable to access microphone. ';
-        if (error.name === 'NotAllowedError') {
-          errorMessage += 'Please grant microphone permissions in your browser settings and refresh the page.';
-        } else if (error.name === 'NotFoundError') {
-          errorMessage += 'No microphone found. Please connect a microphone and try again.';
-        } else if (error.name === 'NotSupportedError') {
-          errorMessage += 'This browser does not support microphone access over HTTP. Please use HTTPS.';
-        } else {
-          errorMessage += 'Please check your browser permissions and try again.';
-        }
-        
-        alert(errorMessage);
-      }
+      showNotification(msg, 'error');
     }
   };
 
-  const getMicrophoneButtonStyle = () => {
-    if (disabled) return 'bg-gray-600 cursor-not-allowed';
-    if (!speechRecognitionSupported) return 'bg-gray-600 cursor-not-allowed';
-    if (microphonePermission === 'denied') return 'bg-red-600 cursor-not-allowed';
-    if (isRecording) return 'bg-red-600 hover:bg-red-700 animate-pulse';
-    return 'bg-blue-600 hover:bg-blue-700';
+  const handleTextSend = () => handleSend(message);
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleTextSend();
+    }
   };
 
-  const getMicrophoneButtonTitle = () => {
-    if (!speechRecognitionSupported) return 'Speech recognition not supported in this browser';
-    if (microphonePermission === 'denied') return 'Microphone access denied - please check browser settings';
-    if (isRecording) return 'Stop recording (or speak now)';
-    return 'Start voice recording';
-  };
+  const micBtnDisabled = disabled || !speechSupported || micPermission === 'denied';
+  const micBtnClass = micBtnDisabled
+    ? 'bg-gray-600 cursor-not-allowed'
+    : isRecording
+      ? 'bg-red-600 hover:bg-red-700 animate-pulse'
+      : 'bg-blue-600 hover:bg-blue-700';
+
+  const placeholder = isRecording
+    ? 'Listening... Speak clearly into your microphone'
+    : !speechSupported
+      ? 'Type your message (voice recognition not supported)...'
+      : micPermission === 'denied'
+        ? 'Type your message (microphone access denied)...'
+        : 'Type your message or use voice input...';
 
   return (
-    <div className="border-t border-gray-700 p-3 sm:p-4">
-      <div className="flex items-end space-x-2 sm:space-x-3">
+    <div className="border-t border-gray-700 p-4">
+      {notification.message && (
+        <div
+          className={`mb-2 text-center text-sm p-2 rounded-md ${
+            notification.type === 'error'
+              ? 'bg-red-900 text-red-200'
+              : notification.type === 'warn'
+              ? 'bg-yellow-900 text-yellow-200'
+              : 'bg-blue-900 text-blue-200'
+          }`}
+        >
+          {notification.message}
+        </div>
+      )}
+
+      <div className="flex items-end space-x-3">
         {/* Voice Input Button */}
         <button
           onClick={toggleRecording}
-          disabled={disabled || !speechRecognitionSupported || microphonePermission === 'denied'}
-          className={`p-2 sm:p-3 rounded-full transition-all duration-200 flex-shrink-0 ${getMicrophoneButtonStyle()}`}
-          title={getMicrophoneButtonTitle()}
+          disabled={micBtnDisabled}
+          className={`p-3 rounded-full transition-all duration-200 flex-shrink-0 ${micBtnClass}`}
+          title={
+            !speechSupported
+              ? 'Speech recognition not supported in this browser'
+              : micPermission === 'denied'
+              ? 'Microphone access denied - enable it in browser settings'
+              : isRecording
+              ? 'Stop recording'
+              : 'Start voice recording'
+          }
         >
           {isRecording ? (
             <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clipRule="evenodd" />
+              <path d="M5 10a1 1 0 0 1 1-1h8a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z" />
             </svg>
           ) : (
             <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
+              <path d="M7 4a3 3 0 0 1 6 0v4a3 3 0 1 1-6 0V4Zm4 10.93A7.001 7.001 0 0 0 17 8a1 1 0 1 0-2 0A5 5 0 0 1 5 8a1 1 0 0 0-2 0 7.001 7.001 0 0 0 6 6.93V17H6a1 1 0 1 0 0 2h8a1 1 0 1 0 0-2h-3v-2.07Z" />
             </svg>
           )}
         </button>
@@ -267,30 +236,21 @@ function MessageInput({ onSendMessage, disabled }) {
             ref={inputRef}
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder={
-              isRecording 
-                ? 'Listening... Speak clearly into your microphone' 
-                : !speechRecognitionSupported 
-                  ? 'Type your message (voice recognition not supported)...'
-                  : microphonePermission === 'denied'
-                    ? 'Type your message (microphone access denied)...'
-                    : 'Type your message or use voice input...'
-            }
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
             disabled={disabled || isRecording}
-            className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none min-h-[44px] max-h-32"
-            rows="1"
-            style={{ height: 'auto' }}
+            className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none min-h-[44px] max-h-32"
+            rows={1}
             onInput={(e) => {
               e.target.style.height = 'auto';
-              e.target.style.height = e.target.scrollHeight + 'px';
+              e.target.style.height = `${e.target.scrollHeight}px`;
             }}
           />
         </div>
 
         {/* Send Button */}
         <button
-          onClick={() => handleSend()}
+          onClick={handleTextSend}
           disabled={disabled || !message.trim() || isRecording}
           className={`p-3 rounded-full transition-colors flex-shrink-0 ${
             disabled || !message.trim() || isRecording
@@ -300,34 +260,31 @@ function MessageInput({ onSendMessage, disabled }) {
           title="Send message"
         >
           <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+            <path d="M10.894 2.553a1 1 0 0 0-1.788 0l-7 14a1 1 0 0 0 1.169 1.409l5-1.429A1 1 0 0 0 9 15.571V11a1 1 0 1 1 2 0v4.571a1 1 0 0 0 .725.962l5 1.428a1 1 0 0 0 1.17-1.408l-7-14z" />
           </svg>
         </button>
       </div>
-      
+
+      {/* Helpful status banners */}
       {isRecording && (
         <div className="mt-2 text-center">
-          <div className="text-sm text-red-400 animate-pulse">
-            🎤 Recording... Speak clearly into your microphone
-          </div>
-          <div className="text-xs text-gray-500 mt-1">
-            Click the microphone button again to stop recording
-          </div>
+          <div className="text-sm text-red-400 animate-pulse">🎤 Recording... Speak clearly into your microphone</div>
+          <div className="text-xs text-gray-500 mt-1">Click the microphone button again to stop</div>
         </div>
       )}
 
-      {!speechRecognitionSupported && (
+      {!speechSupported && (
         <div className="mt-2 text-center">
           <div className="text-xs text-yellow-400">
-            ⚠️ Voice recognition not supported. Please use Chrome, Edge, or Safari for voice features.
+            ⚠️ Voice recognition not supported. Try Chrome, Edge, or Safari for voice features.
           </div>
         </div>
       )}
 
-      {microphonePermission === 'denied' && (
+      {micPermission === 'denied' && (
         <div className="mt-2 text-center">
           <div className="text-xs text-red-400">
-            ❌ Microphone access denied. Please enable microphone permissions in your browser settings.
+            ❌ Microphone access denied. Enable mic permissions in your browser settings.
           </div>
         </div>
       )}
