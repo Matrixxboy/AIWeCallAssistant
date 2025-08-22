@@ -79,7 +79,7 @@ function ProfilePage() {
   const getStats = () => {
     const userMessages = chatHistory.filter(msg => msg.sender === 'user').length;
     const aiMessages = chatHistory.filter(msg => msg.sender === 'ai').length;
-    const totalWords = chatHistory.reduce((acc, msg) => acc + msg.text.split(' ').length, 0);
+    const totalWords = chatHistory.reduce((acc, msg) => acc + (msg?.text?.split(" ").length || 0), 0);
     const avgWordsPerMessage = totalWords / chatHistory.length || 0;
 
     return {

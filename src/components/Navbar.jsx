@@ -2,15 +2,16 @@ import React, { useState } from 'react';
 import { Button, Avatar, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem } from '@heroui/react';
 import { useAuth } from '../contexts/AuthContext';
 import ThemeToggle from './ThemeToggle';
+import { Link } from 'react-router-dom';
 
 function Navbar({ currentPage, setCurrentPage }) {
   const { user, logout } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   const navItems = [
-    { id: 'chat', label: 'Chat', icon: '💬', gradient: 'from-blue-500 to-cyan-500' },
-    { id: 'history', label: 'History', icon: '📚', gradient: 'from-purple-500 to-pink-500' },
-    { id: 'call', label: 'Call', icon: '📞', gradient: 'from-green-500 to-teal-500' }
+    { id: 'chat', redirect: 'chat', label: 'Chat', icon: '💬', gradient: 'from-blue-500 to-cyan-500' },
+    { id: 'history', redirect: 'history', label: 'History', icon: '📚', gradient: 'from-purple-500 to-pink-500' },
+    { id: 'call', redirect: 'calling', label: 'Call', icon: '📞', gradient: 'from-green-500 to-teal-500' }
   ];
 
   const handleLogout = () => {
@@ -34,11 +35,10 @@ function Navbar({ currentPage, setCurrentPage }) {
             {/* Navigation Links */}
             <div className="hidden md:flex space-x-2">
               {navItems.map((item) => (
-                <Button
-                  key={item.id}
-                  onClick={() => setCurrentPage(item.id)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 interactive-scale ${
-                    currentPage === item.id
+                <Link to={item.redirect} key={item.id}>
+                  <Button
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 interactive-scale ${
+                      currentPage === item.id
                       ? `glow-blue bg-gradient-to-r ${item.gradient} text-white shadow-lg`
                       : 'bg-white/10 text-gray-300 hover:bg-white/20 hover:text-white border border-white/20'
                   }`}
@@ -49,17 +49,17 @@ function Navbar({ currentPage, setCurrentPage }) {
                     <span>{item.label}</span>
                   </div>
                 </Button>
+                </Link>
               ))}
             </div>
 
             {/* Mobile Navigation */}
             <div className="md:hidden flex space-x-1">
               {navItems.map((item) => (
-                <Button
-                  key={item.id}
-                  onClick={() => setCurrentPage(item.id)}
-                  className={`p-2 rounded-lg transition-all duration-300 interactive-scale ${
-                    currentPage === item.id
+                <Link to={item.redirect} key={item.id}>
+                  <Button
+                    className={`p-2 rounded-lg transition-all duration-300 interactive-scale ${
+                      currentPage === item.id
                       ? `glow-blue bg-gradient-to-r ${item.gradient} text-white`
                       : 'bg-white/10 text-gray-300 hover:bg-white/20 hover:text-white border border-white/20'
                   }`}
@@ -68,6 +68,7 @@ function Navbar({ currentPage, setCurrentPage }) {
                 >
                   <span className="text-lg">{item.icon}</span>
                 </Button>
+              </Link>
               ))}
             </div>
 
@@ -127,18 +128,20 @@ function Navbar({ currentPage, setCurrentPage }) {
                   key="user-profile"
                   className="text-gray-300 hover:text-white hover:bg-white/10"
                   startContent={<span className="text-lg">👤</span>}
-                  onClick={() => setCurrentPage('profile')}
                 >
+                <Link to="/profile">
                   Profile Settings
+                </Link>
                 </DropdownItem>
                 
                 <DropdownItem 
                   key="settings"
                   className="text-gray-300 hover:text-white hover:bg-white/10"
                   startContent={<span className="text-lg">⚙️</span>}
-                  onClick={() => setCurrentPage('settings')}
                 >
-                  Device Settings
+                  <Link to="/settings">
+                    Device Settings
+                  </Link>
                 </DropdownItem>
                 
                 <DropdownItem 

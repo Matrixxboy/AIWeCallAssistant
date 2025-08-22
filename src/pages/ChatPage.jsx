@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardHeader, CardContent, CardFooter } from '../components/ui/card';
-import { Button } from '@heroui/react';
+import { Button } from '../components/ui/button';
 import { LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { format, subDays, startOfDay } from 'date-fns';
 import ChatWindow from '../components/ChatWindow';
@@ -170,12 +170,11 @@ function ChatPage() {
 
   if (showFullChat) {
     return (
-      <div className="max-w-4xl mx-auto h-full flex flex-col">
+      <div className=" max-w-4xl mx-auto h-full flex flex-col">
         <div className="mb-4">
           <Button
             onClick={() => setShowFullChat(false)}
             variant="ghost"
-            className="text-gray-400 hover:text-white"
           >
             ← Back to Dashboard
           </Button>
@@ -194,7 +193,7 @@ function ChatPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
+    <div className="pt-[120px] max-w-7xl mx-auto space-y-4 sm:space-y-6">
       {/* Welcome Header */}
       <div className="text-center space-y-3 sm:space-y-4 px-2">
         <div className="text-4xl sm:text-6xl animate-bounce">🤖</div>
@@ -438,7 +437,6 @@ function ChatPage() {
             </div>
             <Button
               onClick={() => setShowFullChat(true)}
-              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 interactive-scale"
             >
               Open Full Chat
             </Button>

@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { Button } from '@heroui/react';
+import { Button } from '../components/ui/button';
 import { Card, CardHeader, CardContent, CardFooter } from '../components/ui/card';
 import { Input } from '../components/ui/input';
+import { useAuth } from '../contexts/AuthContext';
 
-function LoginPage({ onLogin }) {
+function LoginPage() {
+  const { login } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -29,7 +31,7 @@ function LoginPage({ onLogin }) {
         // Store user data in localStorage for persistence
         localStorage.setItem('user', JSON.stringify(userData));
         
-        onLogin(userData);
+        login(userData);
         setIsLoading(false);
       }, 1000);
     } else {
@@ -110,12 +112,7 @@ function LoginPage({ onLogin }) {
               <Button
                 type="submit"
                 disabled={isLoading}
-                className={`w-full py-3 px-4 rounded-lg font-medium transition-all duration-300 interactive-scale ${
-                  isLoading
-                    ? 'bg-gray-600 cursor-not-allowed'
-                    : 'glow-blue bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700'
-                } text-white`}
-                size="lg"
+                variant="default"
               >
                 {isLoading ? (
                   <div className="flex items-center justify-center">
@@ -137,7 +134,6 @@ function LoginPage({ onLogin }) {
               <Button
                 onClick={handleDemoLogin}
                 variant="ghost"
-                className="text-blue-400 hover:text-blue-300 text-sm font-medium hover:bg-white/10"
                 disabled={isLoading}
               >
                 Use Demo Account (demo/demo123)
