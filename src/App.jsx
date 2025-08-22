@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { HeroUIProvider } from '@heroui/react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Navbar from './components/Navbar';
 import ChatPage from './pages/ChatPage';
@@ -59,9 +60,11 @@ function AppContent() {
 
 function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <HeroUIProvider>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </HeroUIProvider>
   );
 }
 
