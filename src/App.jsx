@@ -5,6 +5,7 @@ import Navbar from './components/Navbar';
 import ChatPage from './pages/ChatPage';
 import ChatHistoryPage from './pages/ChatHistoryPage';
 import CallingPage from './pages/CallingPage';
+import ProfilePage from './pages/ProfilePage';
 import LoginPage from './pages/LoginPage';
 
 function AppContent() {
@@ -39,6 +40,10 @@ function AppContent() {
         return <ChatHistoryPage />;
       case 'call':
         return <CallingPage />;
+      case 'profile':
+        return <ProfilePage />;
+      case 'settings':
+        return <ProfilePage />;
       default:
         return <ChatPage />;
     }
