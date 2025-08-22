@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { HeroUIProvider } from '@heroui/react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import Navbar from './components/Navbar';
 import ChatPage from './pages/ChatPage';
 import ChatHistoryPage from './pages/ChatHistoryPage';
@@ -11,6 +12,7 @@ import LoginPage from './pages/LoginPage';
 function AppContent() {
   const [currentPage, setCurrentPage] = useState('chat');
   const { user, login, isLoading, isAuthenticated } = useAuth();
+  const { theme } = useTheme();
 
   // Show loading spinner while checking authentication
   if (isLoading) {
@@ -50,7 +52,9 @@ function AppContent() {
   };
 
   return (
-    <div className="dark min-h-screen bg-gray-900 text-gray-200">
+    <div className={`${theme} min-h-screen transition-colors duration-300 ${
+      theme === 'dark' ? 'bg-gray-900 text-gray-200' : 'bg-gray-50 text-gray-900'
+    }`}>
       <Navbar
         currentPage={currentPage}
         setCurrentPage={setCurrentPage}
@@ -65,11 +69,13 @@ function AppContent() {
 
 function App() {
   return (
-    <HeroUIProvider>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
-    </HeroUIProvider>
+    <ThemeProvider>
+      <HeroUIProvider>
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
+      </HeroUIProvider>
+    </ThemeProvider>
   );
 }
 

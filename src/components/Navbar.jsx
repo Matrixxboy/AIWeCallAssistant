@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Button, Avatar, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem } from '@heroui/react';
 import { useAuth } from '../contexts/AuthContext';
+import ThemeToggle from './ThemeToggle';
 
 function Navbar({ currentPage, setCurrentPage }) {
   const { user, logout } = useAuth();
@@ -69,6 +70,9 @@ function Navbar({ currentPage, setCurrentPage }) {
                 </Button>
               ))}
             </div>
+
+            {/* Theme Toggle */}
+            <ThemeToggle />
 
             {/* User Menu */}
             <Dropdown 
