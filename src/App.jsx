@@ -45,9 +45,9 @@ function AppContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-200">
-      <Navbar 
-        currentPage={currentPage} 
+    <div className="dark min-h-screen bg-gray-900 text-gray-200">
+      <Navbar
+        currentPage={currentPage}
         setCurrentPage={setCurrentPage}
         user={user}
       />
