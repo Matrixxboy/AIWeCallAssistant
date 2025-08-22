@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import 'webrtc-adapter';
 
 function MessageInput({ onSendMessage, disabled }) {
   const [message, setMessage] = useState('');
