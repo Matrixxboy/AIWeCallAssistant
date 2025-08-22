@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import 'webrtc-adapter';
 
 function CallingPage() {
   const [roomState, setRoomState] = useState('idle'); // idle, joined, listening, speaking
@@ -12,11 +13,139 @@ function CallingPage() {
   const [errorMessage, setErrorMessage] = useState('');
   const [recognitionSupported, setRecognitionSupported] = useState(true);
   const [speechSupported, setSpeechSupported] = useState(true);
+  const [availableDevices, setAvailableDevices] = useState({ audio: [], video: [] });
+  const [selectedAudioDevice, setSelectedAudioDevice] = useState('');
+  const [browserInfo, setBrowserInfo] = useState({ name: '', version: '', supported: true });
+  const [showDeviceSettings, setShowDeviceSettings] = useState(false);
   
   const recognitionRef = useRef(null);
   const speechSynthesisRef = useRef(null);
 
+  // Browser detection and compatibility check
+  const detectBrowserCompatibility = () => {
+    const userAgent = navigator.userAgent;
+    let browserName = 'Unknown';
+    let browserVersion = 'Unknown';
+    let isSupported = false;
+
+    // Chrome
+    if (userAgent.indexOf('Chrome') > -1 && userAgent.indexOf('Edg') === -1) {
+      browserName = 'Chrome';
+      const match = userAgent.match(/Chrome\/(\d+)/);
+      browserVersion = match ? match[1] : 'Unknown';
+      isSupported = parseInt(browserVersion) >= 25; // WebRTC support since Chrome 25
+    }
+    // Edge
+    else if (userAgent.indexOf('Edg') > -1) {
+      browserName = 'Edge';
+      const match = userAgent.match(/Edg\/(\d+)/);
+      browserVersion = match ? match[1] : 'Unknown';
+      isSupported = parseInt(browserVersion) >= 79; // Chromium-based Edge
+    }
+    // Firefox
+    else if (userAgent.indexOf('Firefox') > -1) {
+      browserName = 'Firefox';
+      const match = userAgent.match(/Firefox\/(\d+)/);
+      browserVersion = match ? match[1] : 'Unknown';
+      isSupported = parseInt(browserVersion) >= 44; // WebRTC support since Firefox 44
+    }
+    // Safari
+    else if (userAgent.indexOf('Safari') > -1 && userAgent.indexOf('Chrome') === -1) {
+      browserName = 'Safari';
+      const match = userAgent.match(/Version\/(\d+)/);
+      browserVersion = match ? match[1] : 'Unknown';
+      isSupported = parseInt(browserVersion) >= 11; // WebRTC support since Safari 11
+    }
+    // Opera
+    else if (userAgent.indexOf('OPR') > -1 || userAgent.indexOf('Opera') > -1) {
+      browserName = 'Opera';
+      const match = userAgent.match(/(OPR|Opera)\/(\d+)/);
+      browserVersion = match ? match[2] : 'Unknown';
+      isSupported = parseInt(browserVersion) >= 18; // WebRTC support since Opera 18
+    }
+
+    setBrowserInfo({ name: browserName, version: browserVersion, supported: isSupported });
+    
+    if (!isSupported) {
+      setErrorMessage(`${browserName} ${browserVersion} may not fully support WebRTC features. Please update your browser or use Chrome/Edge for the best experience.`);
+    }
+  };
+
+  // Get available media devices
+  const getAvailableDevices = async () => {
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+        console.warn('Media devices enumeration not supported');
+        return;
+      }
+
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioDevices = devices.filter(device => device.kind === 'audioinput' && device.deviceId !== 'default');
+      const videoDevices = devices.filter(device => device.kind === 'videoinput');
+      
+      setAvailableDevices({
+        audio: audioDevices,
+        video: videoDevices
+      });
+
+      // Set default audio device if none selected
+      if (audioDevices.length > 0 && !selectedAudioDevice) {
+        setSelectedAudioDevice(audioDevices[0].deviceId);
+      }
+
+      console.log('Available devices:', { audio: audioDevices.length, video: videoDevices.length });
+    } catch (error) {
+      console.error('Error enumerating devices:', error);
+      setErrorMessage('Unable to access media devices. Please check your permissions.');
+    }
+  };
+
+  // Test microphone access with selected device
+  const testMicrophoneAccess = async () => {
+    try {
+      const constraints = {
+        audio: selectedAudioDevice ? { deviceId: selectedAudioDevice } : true
+      };
+      
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      
+      // Test if we can get audio levels
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const analyser = audioContext.createAnalyser();
+      const microphone = audioContext.createMediaStreamSource(stream);
+      microphone.connect(analyser);
+      
+      console.log('Microphone test successful');
+      
+      // Clean up
+      stream.getTracks().forEach(track => track.stop());
+      audioContext.close();
+      
+      return true;
+    } catch (error) {
+      console.error('Microphone test failed:', error);
+      
+      if (error.name === 'NotAllowedError') {
+        setErrorMessage('Microphone access denied. Please allow microphone permissions and refresh the page.');
+      } else if (error.name === 'NotFoundError') {
+        setErrorMessage('No microphone found. Please connect a microphone and try again.');
+      } else if (error.name === 'NotSupportedError') {
+        setErrorMessage('Microphone access not supported. Please use HTTPS or a supported browser.');
+      } else {
+        setErrorMessage(`Microphone error: ${error.message}`);
+      }
+      
+      return false;
+    }
+  };
+
   useEffect(() => {
+    // Detect browser and check compatibility
+    detectBrowserCompatibility();
+    
+    // Get available media devices
+    getAvailableDevices();
+    
     // Check for Web Speech API support
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       setRecognitionSupported(false);
@@ -145,9 +274,15 @@ function CallingPage() {
     window.speechSynthesis.speak(utterance);
   };
 
-  const startListening = () => {
+  const startListening = async () => {
     if (!recognitionSupported || !recognitionRef.current) {
       setErrorMessage('Speech recognition is not available.');
+      return;
+    }
+
+    // Test microphone access first
+    const micTest = await testMicrophoneAccess();
+    if (!micTest) {
       return;
     }
 
@@ -216,6 +351,16 @@ function CallingPage() {
         <div className="text-center mb-8">
           <h2 className="text-3xl font-bold text-white mb-2">AI Voice Chat Room</h2>
           <p className="text-gray-400">Talk to Gemini AI using your voice</p>
+          
+          {/* Browser Info */}
+          <div className="mt-4 text-sm">
+            <span className={`inline-block px-3 py-1 rounded-full ${
+              browserInfo.supported ? 'bg-green-900 text-green-200' : 'bg-red-900 text-red-200'
+            }`}>
+              {browserInfo.name} {browserInfo.version} 
+              {browserInfo.supported ? ' ✓ Supported' : ' ⚠ Limited Support'}
+            </span>
+          </div>
         </div>
 
         {errorMessage && (
@@ -231,6 +376,48 @@ function CallingPage() {
               For the best experience, please use a modern browser like Chrome or Edge that supports
               Web Speech API for voice recognition and synthesis.
             </p>
+          </div>
+        )}
+
+        {/* Device Settings Panel */}
+        {showDeviceSettings && (
+          <div className="mb-6 p-4 bg-gray-700 border border-gray-600 rounded-lg">
+            <h4 className="text-white font-semibold mb-4">🎤 Device Settings</h4>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Microphone ({availableDevices.audio.length} found)
+                </label>
+                <select
+                  value={selectedAudioDevice}
+                  onChange={(e) => setSelectedAudioDevice(e.target.value)}
+                  className="w-full bg-gray-600 border border-gray-500 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Default Microphone</option>
+                  {availableDevices.audio.map((device) => (
+                    <option key={device.deviceId} value={device.deviceId}>
+                      {device.label || `Microphone ${device.deviceId.slice(0, 8)}...`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div className="flex space-x-2">
+                <button
+                  onClick={testMicrophoneAccess}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors text-sm"
+                >
+                  Test Microphone
+                </button>
+                <button
+                  onClick={getAvailableDevices}
+                  className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-md transition-colors text-sm"
+                >
+                  Refresh Devices
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -266,12 +453,22 @@ function CallingPage() {
                       </button>
                     </div>
                   </div>
-                  <button
-                    onClick={joinRoom}
-                    className="w-full py-3 bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors font-medium"
-                  >
-                    Join AI Chat Room
-                  </button>
+                  
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={joinRoom}
+                      className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white rounded-md transition-colors font-medium"
+                    >
+                      Join AI Chat Room
+                    </button>
+                    <button
+                      onClick={() => setShowDeviceSettings(!showDeviceSettings)}
+                      className="px-4 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-md transition-colors"
+                      title="Device Settings"
+                    >
+                      ⚙️
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -291,7 +488,7 @@ function CallingPage() {
             </div>
 
             {/* Voice Controls */}
-            <div className="flex justify-center space-x-4">
+            <div className="flex justify-center space-x-4 flex-wrap">
               <button
                 onClick={isListening ? stopListening : startListening}
                 disabled={!recognitionSupported}
@@ -320,6 +517,17 @@ function CallingPage() {
               )}
 
               <button
+                onClick={() => setShowDeviceSettings(!showDeviceSettings)}
+                className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-full font-medium transition-colors"
+                title="Device Settings"
+              >
+                <div className="flex items-center space-x-2">
+                  <span className="text-xl">⚙️</span>
+                  <span>Settings</span>
+                </div>
+              </button>
+
+              <button
                 onClick={leaveRoom}
                 className="px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-full font-medium transition-colors"
               >
@@ -336,6 +544,10 @@ function CallingPage() {
               <div className={`flex items-center space-x-2 ${isSpeaking ? 'text-blue-400' : 'text-gray-500'}`}>
                 <div className={`w-2 h-2 rounded-full ${isSpeaking ? 'bg-blue-400 animate-pulse' : 'bg-gray-500'}`}></div>
                 <span>AI Speaking</span>
+              </div>
+              <div className={`flex items-center space-x-2 ${selectedAudioDevice ? 'text-green-400' : 'text-gray-500'}`}>
+                <div className={`w-2 h-2 rounded-full ${selectedAudioDevice ? 'bg-green-400' : 'bg-gray-500'}`}></div>
+                <span>Microphone</span>
               </div>
             </div>
 
@@ -391,11 +603,14 @@ function CallingPage() {
         <div className="mt-8 p-4 bg-gray-700 rounded-lg">
           <h4 className="text-sm font-medium text-gray-300 mb-2">Technical Information</h4>
           <div className="text-xs text-gray-500 space-y-1">
-            <p>• Uses Web Speech API for voice recognition and synthesis</p>
+            <p>• Uses WebRTC Adapter for cross-browser compatibility</p>
+            <p>• Web Speech API for voice recognition and synthesis</p>
             <p>• AI responses powered by Gemini API</p>
             <p>• Supports English language voice interaction</p>
             <p>• Real-time speech-to-text and text-to-speech conversion</p>
             <p>• Room-based conversation context and history</p>
+            <p>• Browser: {browserInfo.name} {browserInfo.version} {browserInfo.supported ? '(Supported)' : '(Limited)'}</p>
+            <p>• Audio Devices: {availableDevices.audio.length} microphones detected</p>
           </div>
         </div>
       </div>
